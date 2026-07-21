@@ -23,8 +23,8 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Get session and user
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+  // getUser() revalidates the token against the Supabase Auth server.
+  // getSession() only decodes the cookie and must not be trusted for authorization.
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
   const pathname = request.nextUrl.pathname;
@@ -41,25 +41,22 @@ export async function middleware(request: NextRequest) {
     '/admin/*',
   ];
 
-  // Redirect to login if no session for protected routes
+  // Redirect to login if not authenticated on a protected route
   if (
     protectedRoutes.some(route => pathname.startsWith(route.replace('*', ''))) &&
-    (!session || sessionError)
+    (!user || userError)
   ) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  // Check is_admin for /admin/* routes
-  if (pathname.startsWith('/admin') && (!user || userError)) {
-    console.error('Middleware auth error:', userError?.message);
-    return NextResponse.redirect(new URL('/dashboard', request.url));
-  }
-
+  // /admin additionally requires is_admin. The check above should already have
+  // redirected unauthenticated requests; this guard keeps that independent of
+  // the protectedRoutes list staying correct.
   if (pathname.startsWith('/admin')) {
-    if (!user || !user.id) {
-      console.error('Middleware profile error: User is null or missing id');
-      return NextResponse.redirect(new URL('/dashboard', request.url));
+    if (!user) {
+      return NextResponse.redirect(new URL('/login', request.url));
     }
+
     const { data, error: profileError } = await supabase
       .from('users')
       .select('is_admin')

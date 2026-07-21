@@ -3,6 +3,9 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
+  // pdfkit reads its .afm font metrics from disk relative to its own location.
+  // Bundling it into vendor-chunks/ breaks that path, so load it from node_modules.
+  serverExternalPackages: ['pdfkit'],
   images: {
     unoptimized: true,
   },
