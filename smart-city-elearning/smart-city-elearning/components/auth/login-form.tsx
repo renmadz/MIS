@@ -44,12 +44,15 @@ export function LoginForm() {
 
       const dbUser = await getUserByEmail(formData.email)
       if (!dbUser) {
+        // Sign-in already created a session; discard it so the failure is real
+        await supabaseBrowser.auth.signOut()
         setError("User not found in database")
         return
       }
 
       // Normalize comparison to avoid case sensitivity
       if (formData.userType.trim().toLowerCase() !== dbUser.user_type.trim().toLowerCase()) {
+        await supabaseBrowser.auth.signOut()
         setError("User type doesn't match your account")
         return
       }
@@ -60,6 +63,8 @@ export function LoginForm() {
       window.location.href = "/dashboard"
       
     } catch (err: any) {
+      // Sign-in may have succeeded before the throw; never leave a session behind
+      await supabaseBrowser.auth.signOut().catch(() => {})
       setError("Login failed. Please try again.")
     } finally {
       setIsLoading(false)
