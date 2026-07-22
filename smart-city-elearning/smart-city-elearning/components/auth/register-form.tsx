@@ -138,18 +138,17 @@ export function RegisterForm() {
   })
 
   // Auto-populate organization for LGU users when city is selected
+  // For LGU users, auto-populate organization from the selected city + province.
+  // Non-LGU users type their own organization; switching user type or province is
+  // handled by those Select onValueChange handlers (which clear the LGU-only
+  // fields), so this effect must NOT reset organization for non-LGU users —
+  // doing so wiped a manually-entered organization whenever province changed.
   useEffect(() => {
     if (formData.userType === "lgu" && formData.city && formData.province) {
       const formattedProvince = formData.province.charAt(0).toUpperCase() + formData.province.slice(1)
       setFormData((prev) => ({
         ...prev,
         organization: `LGU ${formData.city}, ${formattedProvince}`
-      }))
-    } else if (formData.userType !== "lgu") {
-      setFormData((prev) => ({
-        ...prev,
-        organization: "",
-        city: ""
       }))
     }
   }, [formData.userType, formData.city, formData.province])
