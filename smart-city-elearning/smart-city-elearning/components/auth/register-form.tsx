@@ -204,10 +204,15 @@ export function RegisterForm() {
         return
       }
 
-      // Ensure session is active
-      const { data: { session } } = await supabaseBrowser.auth.getSession()
-      if (!session) {
-        setMessage({ type: "error", text: "Authentication session not established. Please try again." })
+      // If email confirmation is enabled in Supabase Auth, signUp() returns a
+      // user but NO session until the user confirms via the emailed link. That
+      // is a success, not an error — guide them to their inbox. The profile row
+      // is inserted below only when a session exists (confirmation off).
+      if (!authData.session) {
+        setMessage({
+          type: "success",
+          text: "Account created. Please check your email to confirm your account, then sign in.",
+        })
         setIsLoading(false)
         return
       }

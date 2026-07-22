@@ -83,6 +83,29 @@ middleware.ts     Auth session refresh and route protection
 - **Learner** — Enroll, track progress, earn certificates
 - **Admin** — `users.is_admin = true`; access `/admin` routes
 
+## Registration & email confirmation
+
+Registration behavior depends on the Supabase Auth **Confirm email** toggle
+(Authentication > Settings > Email Auth):
+
+- **Confirm email OFF** (current configuration): `signUp()` returns a live
+  session immediately. The app inserts the user's `public.users` profile row in
+  the same step and redirects to `/login`. Registration is usable right away.
+- **Confirm email ON**: `signUp()` returns a user but **no session** until the
+  user clicks the confirmation link in their email. The registration form
+  detects this and shows a "check your email to confirm your account" message
+  instead of an error.
+
+> **Important if you enable Confirm email:** the profile row in `public.users` is
+> currently created inline during registration, which requires the immediate
+> session that only exists when confirmation is OFF. With confirmation ON, that
+> insert is intentionally skipped, so a confirmed user would have an `auth.users`
+> record but **no `public.users` profile** — and the app's login/dashboard flow
+> depends on that profile existing. Turning confirmation ON therefore also
+> requires moving profile creation to a post-confirmation step (a database
+> trigger on `auth.users`, or an auth-callback route) before the flow works
+> end to end. See the `handle_new_user()` stub in `001_initial_schema.sql`.
+
 ## Protected routes
 
 Middleware requires authentication for:
