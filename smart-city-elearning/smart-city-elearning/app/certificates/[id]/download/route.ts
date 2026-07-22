@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
-import { supabaseServer } from "@/lib/supabase/server-client";
+import { supabaseAdmin } from "@/lib/supabase/admin-client";
+import { requireAuth } from "@/lib/auth/api-auth";
 import type { Certificate } from "@/lib/types/database";
 import fs from "fs";
 import path from "path";
@@ -22,7 +23,16 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
       return NextResponse.json({ error: "Invalid certificate ID format" }, { status: 400 });
     }
 
-    const supabase = await supabaseServer();
+    // Require authentication; only the certificate owner or an admin may download.
+    const { error: authError, user, profile } = await requireAuth();
+    if (authError) {
+      return authError;
+    }
+
+    // Data fetched with the service-role client; this route is the trust boundary
+    // and enforces ownership explicitly below (not via RLS), so a non-owner gets
+    // a deterministic 403 rather than a 404 once certificate RLS is tightened.
+    const supabase = supabaseAdmin();
 
     // Fetch certificate data
     const { data: certData, error: certError } = await supabase
@@ -43,6 +53,11 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
     if (certError || !certData) {
       return NextResponse.json({ error: "Certificate not found", details: certError?.message }, { status: 404 });
+    }
+
+    // Ownership check: only the owner or an admin may download this certificate.
+    if (certData.user_id !== user!.id && !profile!.is_admin) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
     // Enrollment (optional)
