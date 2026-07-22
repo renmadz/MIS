@@ -10,7 +10,6 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Eye, EyeOff, Mail, Lock, User, Building2, MapPin, CheckCircle, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
-import { getUserByEmail } from "@/lib/database/client-queries"
 
 // Hardcoded provinces and cities for Region 2
 const region2Locations = {
@@ -182,15 +181,9 @@ export function RegisterForm() {
     }
 
     try {
-      // Check if user already exists
-      const existingUser = await getUserByEmail(formData.email)
-      if (existingUser) {
-        setMessage({ type: "error", text: "An account with this email already exists" })
-        setIsLoading(false)
-        return
-      }
-
-      // Sign up user with Supabase auth
+      // Sign up user with Supabase auth. A duplicate email is surfaced by
+      // signUp()'s own error below (the previous anon pre-check could not read
+      // the users table under RLS, so it was removed).
       const { data: authData, error: authError } = await supabaseBrowser.auth.signUp({
         email: formData.email,
         password: formData.password,
