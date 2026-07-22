@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, CheckCircle, Book, AlertCircle } from "lucide-react"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
 import type { Module, Lesson, Resource } from "@/lib/types/database"
+import { PdfViewer } from "@/components/courses/pdf-viewer"
 import Confetti from "react-confetti"
 
 // Minimal interface for module query result
@@ -364,18 +365,7 @@ export function ModuleContent({ courseId, moduleId }: { courseId: string; module
             )}
           </CardHeader>
           <CardContent>
-            <div style={{ width: '100%', height: '600px' }}>
-              <iframe
-                src={`https://docs.google.com/viewer?url=${encodeURIComponent(pdfUrl)}&embedded=true`}
-                width="100%"
-                height="100%"
-                style={{ border: 'none' }}
-                title="PDF Viewer"
-                onError={() => {
-                  setError("Failed to load PDF in Google Docs Viewer")
-                }}
-              />
-            </div>
+            <PdfViewer url={pdfUrl} initialPage={lessons[0]?.start_page || 1} />
           </CardContent>
         </Card>
       </div>
