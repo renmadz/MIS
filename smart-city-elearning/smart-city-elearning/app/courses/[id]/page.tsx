@@ -23,6 +23,7 @@ export default function CoursePage() {
   const [course, setCourse] = useState<Course | null>(null)
   const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
   const [progressData, setProgressData] = useState<ProgressDataItem[] | null>(null); // State for progress data
+  const [unmetPrereqs, setUnmetPrereqs] = useState<string[]>([]) // Unmet prerequisite course titles
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -62,6 +63,13 @@ export default function CoursePage() {
           if (enrollmentError && enrollmentError.code !== 'PGRST116') throw enrollmentError
           userEnrollment = enrollmentData || null;
           setEnrollment(userEnrollment);
+
+          // Compute unmet prerequisites (single source of truth) so the header can
+          // show a locked state when the user is not yet enrolled.
+          const { data: unmetData } = await supabaseBrowser.rpc('get_unmet_prerequisites', {
+            p_course_id: id,
+          })
+          setUnmetPrereqs(Array.isArray(unmetData) ? unmetData : [])
 
           // --- Fetch Progress Data if enrolled ---
           if (userEnrollment) {
@@ -121,7 +129,7 @@ export default function CoursePage() {
     <div className="min-h-screen bg-background">
       <Header />
       <div className="container mx-auto px-4 py-8">
-        <CourseHeader courseId={course.id} course={course} enrollment={enrollment} />
+        <CourseHeader courseId={course.id} course={course} enrollment={enrollment} unmetPrereqs={unmetPrereqs} />
         <div className="grid lg:grid-cols-4 gap-8 mt-8">
           <div className="lg:col-span-3">
             {/* Pass enrollment and progressData props */}

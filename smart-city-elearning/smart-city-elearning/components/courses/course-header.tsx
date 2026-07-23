@@ -2,8 +2,9 @@
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Clock, BookOpenText, Users, Star, Award, Play } from "lucide-react"
+import { Clock, BookOpenText, Users, Star, Award, Play, Lock, AlertCircle } from "lucide-react"
 import Image from "next/image"
+import { useState } from "react"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
 import type { Course, Enrollment } from "@/lib/types/database"
 
@@ -11,13 +12,34 @@ interface CourseHeaderProps {
   courseId: string
   course: Course
   enrollment: Enrollment | null
+  // Unmet prerequisite course titles for the current user (computed by the page
+  // via get_unmet_prerequisites). Empty when eligible or not applicable.
+  unmetPrereqs?: string[]
 }
 
-export function CourseHeader({ courseId, course, enrollment }: CourseHeaderProps) {
+export function CourseHeader({ courseId, course, enrollment, unmetPrereqs = [] }: CourseHeaderProps) {
+  const [message, setMessage] = useState<string | null>(null)
+  const locked = !enrollment && unmetPrereqs.length > 0
+
   const handleEnroll = async () => {
+    setMessage(null)
     try {
       const { data: { user } } = await supabaseBrowser.auth.getUser()
       if (!user?.id) throw new Error("User not authenticated")
+
+      // Prerequisite gate — single source of truth (get_unmet_prerequisites).
+      // Re-checked here so enrollment is blocked even if the button wasn't disabled.
+      const { data: unmet, error: prereqError } = await supabaseBrowser.rpc(
+        "get_unmet_prerequisites",
+        { p_course_id: courseId }
+      )
+      if (prereqError) throw prereqError
+      if (Array.isArray(unmet) && unmet.length > 0) {
+        setMessage(
+          `Locked — complete these prerequisite course${unmet.length > 1 ? "s" : ""} first: ${unmet.join(", ")}`
+        )
+        return
+      }
 
       // Fetch modules and lessons for the course
       const { data: modules, error: modulesError } = await supabaseBrowser
@@ -31,7 +53,12 @@ export function CourseHeader({ courseId, course, enrollment }: CourseHeaderProps
         .order('order', { ascending: true, foreignTable: 'lessons' })
 
       if (modulesError) throw modulesError
-      if (!modules || modules.length === 0) throw new Error("No modules found for this course")
+      // Distinct from the prerequisite-lock message: the course exists but has no
+      // published module content yet.
+      if (!modules || modules.length === 0) {
+        setMessage("This course doesn't have any published content yet. Please check back later.")
+        return
+      }
 
       // Flatten lessons from all modules
       const lessons = modules.flatMap(module => module.lessons || [])
@@ -72,7 +99,7 @@ export function CourseHeader({ courseId, course, enrollment }: CourseHeaderProps
 
       window.location.reload() // Refresh to update enrollment status
     } catch (err: any) {
-      alert("Failed to enroll in the course. Please try again.")
+      setMessage("Failed to enroll in the course. Please try again.")
     }
   }
 
@@ -116,20 +143,44 @@ export function CourseHeader({ courseId, course, enrollment }: CourseHeaderProps
           ))}
         </div>
 
+        {locked && (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+            <div className="flex items-center gap-2 mb-2 text-amber-800">
+              <Lock className="w-4 h-4" />
+              <span className="font-medium">Prerequisite{unmetPrereqs.length > 1 ? "s" : ""} required</span>
+            </div>
+            <p className="text-sm text-amber-800/80 mb-2">
+              Complete the following course{unmetPrereqs.length > 1 ? "s" : ""} before enrolling:
+            </p>
+            <ul className="list-disc pl-6 space-y-1 text-sm text-amber-900">
+              {unmetPrereqs.map((title) => (
+                <li key={title} className="font-medium">{title}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+
         <div className="flex items-center gap-4">
           <Button
             size="lg"
             className="gap-2 cursor-pointer"
             onClick={handleEnroll}
-            disabled={!!enrollment || !course.is_active}
+            disabled={!!enrollment || !course.is_active || locked}
           >
-            <Play className="w-4 h-4" />
-            {enrollment ? "Enrolled" : "Start Learning"}
+            {locked ? <Lock className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+            {enrollment ? "Enrolled" : locked ? "Locked" : "Start Learning"}
           </Button>
           <Button variant="outline" size="lg" disabled>
             Preview Course
           </Button>
         </div>
+
+        {message && (
+          <div className="mt-4 flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span>{message}</span>
+          </div>
+        )}
 
         <div className="flex items-center gap-2 mt-4 text-sm text-muted-foreground">
           <Award className="w-4 h-4 text-primary" />
