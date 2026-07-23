@@ -106,6 +106,31 @@ Registration behavior depends on the Supabase Auth **Confirm email** toggle
 > trigger on `auth.users`, or an auth-callback route) before the flow works
 > end to end. See the `handle_new_user()` stub in `001_initial_schema.sql`.
 
+## Content Workflow
+
+Courses are produced through a review-gated pipeline:
+
+1. **Admin creates the course shell** — title, category, description, and other
+   course-level metadata — and **assigns an instructor** to it.
+2. **Instructor uploads content** — modules and their materials (PDFs to the
+   private `course-materials` bucket, lesson structure, etc.) for the assigned
+   course.
+3. **Admin reviews and approves** the submitted modules before the course is
+   published. Nothing an instructor uploads goes live to learners until an admin
+   approves it.
+
+### Prerequisites
+
+- A course's prerequisites are matched **live** against other courses by
+  **case-insensitive exact course-title** comparison — there are no stored
+  course-to-course links; the relationship is resolved at check time from the
+  current catalog.
+- Prerequisites are **hard-blocked**: a learner cannot enroll in a course until
+  its prerequisite course(s) are satisfied.
+- **Already-issued certificates are never revoked retroactively.** If a course
+  later gains a new prerequisite, learners who already completed and were issued
+  a certificate keep it — the new prerequisite only affects future enrollments.
+
 ## Protected routes
 
 Middleware requires authentication for:
