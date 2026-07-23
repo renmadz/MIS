@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { BookOpenText, Bell, Settings, LogOut } from "lucide-react"
+import { BookOpenText, Bell, Settings, LogOut, Shield, GraduationCap } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -127,6 +127,25 @@ export function Header() {
                       Profile Settings
                     </Link>
                   </DropdownMenuItem>
+                  {/* Discovery links for the privileged areas — the only way in
+                      until a role-aware nav exists. Both can show at once. */}
+                  {(user.is_admin || user.is_instructor) && <DropdownMenuSeparator />}
+                  {user.is_admin && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin" className="cursor-pointer">
+                        <Shield className="mr-2 h-4 w-4" />
+                        Admin Panel
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {user.is_instructor && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/instructor" className="cursor-pointer">
+                        <GraduationCap className="mr-2 h-4 w-4" />
+                        Instructor Panel
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="cursor-pointer" onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />

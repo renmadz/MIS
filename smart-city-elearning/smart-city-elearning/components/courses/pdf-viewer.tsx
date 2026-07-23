@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Document, Page, pdfjs } from "react-pdf"
 import "react-pdf/dist/Page/AnnotationLayer.css"
 import "react-pdf/dist/Page/TextLayer.css"
@@ -17,7 +17,20 @@ import { Loader2, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, AlertCircle } from
 // react-pdf/node_modules/pdfjs-dist) — a mismatch throws an API/Worker error.
 pdfjs.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs"
 
-export function PdfViewer({ url, initialPage = 1 }: { url: string; initialPage?: number }) {
+export function PdfViewer({
+  url,
+  initialPage = 1,
+  onPageChange,
+  onDocumentLoad,
+}: {
+  url: string
+  initialPage?: number
+  /** Fires whenever the visible page changes — lets a parent read the page the
+   *  user is actually looking at (used by the instructor module editor). */
+  onPageChange?: (page: number) => void
+  /** Fires once the PDF is parsed, with its real page count. */
+  onDocumentLoad?: (numPages: number) => void
+}) {
   const [numPages, setNumPages] = useState(0)
   const [page, setPage] = useState(initialPage)
   const [scale, setScale] = useState(1.2)
@@ -27,9 +40,14 @@ export function PdfViewer({ url, initialPage = 1 }: { url: string; initialPage?:
     ({ numPages: n }: { numPages: number }) => {
       setNumPages(n)
       setPage(Math.min(Math.max(1, initialPage || 1), n))
+      onDocumentLoad?.(n)
     },
-    [initialPage]
+    [initialPage, onDocumentLoad]
   )
+
+  useEffect(() => {
+    onPageChange?.(page)
+  }, [page, onPageChange])
 
   const go = useCallback(
     (delta: number) => setPage((p) => Math.min(Math.max(1, p + delta), numPages || 1)),

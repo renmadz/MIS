@@ -1,9 +1,15 @@
 import { InstructorHeader } from "@/components/instructor/instructor-header";
 import { InstructorSidebar } from "@/components/instructor/instructor-sidebar";
 import { InstructorGuard } from "@/components/instructor/instructor-guard";
-import { InstructorCourseList } from "@/components/instructor/instructor-course-list";
+import { ModuleEditor } from "@/components/instructor/module-editor";
 
-export default function InstructorPage() {
+export default async function InstructorModulePage({
+  params,
+}: {
+  params: Promise<{ courseId: string; moduleId: string }>;
+}) {
+  const { courseId, moduleId } = await params;
+
   return (
     <div className="min-h-screen bg-background">
       <InstructorHeader />
@@ -11,7 +17,7 @@ export default function InstructorPage() {
         <InstructorSidebar />
         <main className="flex-1 p-6">
           <InstructorGuard>
-            <InstructorCourseList />
+            <ModuleEditor courseId={courseId} moduleId={moduleId} />
           </InstructorGuard>
         </main>
       </div>
