@@ -28,6 +28,16 @@ The live DB was **not** built from `001_initial_schema.sql`. Build new schema ag
 - **`lessons_type_check` = ('video','text','quiz','assignment')** — **`'pdf'` is NOT valid and never was.**
 - **`resources.type` CHECK = ('pdf','video','link','document')**.
 
+### Known live columns (check this BEFORE writing any fixture INSERT)
+
+Built from prior schema dumps plus trial-and-error. **Living reference — correct and extend it whenever a future fixture or dump reveals something new.** Do not guess column names/types; guessing is what produced this list the hard way.
+
+- **users:** `id`, `email`, `name` (**not** `full_name`), `user_type` (NOT NULL, no default), `region` (NOT NULL, no default), `organization`, `position`, `province`, `city`, `avatar`, `is_admin`, `is_instructor`, `status`, `created_at`, `updated_at`
+- **courses:** `id`, `title`, `description` (NOT NULL, no default), `category` (NOT NULL, no default), `level` (NOT NULL, CHECK `beginner`/`intermediate`/`advanced`, no default), `duration` (NOT NULL int, no default), `target_audience` (**text[]**, NOT NULL — use `ARRAY['x']`, not a bare string), `prerequisites` (text[], nullable), `thumbnail` (NOT NULL, no default), `instructor` (NOT NULL text, no default), `instructor_id` (nullable FK), `rating`, `skills` (text[]), `enrollment_count`, `is_active`, `created_at`, `updated_at`
+- **modules:** `id`, `course_id`, `title`, `description` (NOT NULL, no default), `"order"` (**reserved word — must be quoted**, NOT NULL, no default), `estimated_duration` (NOT NULL, no default), `is_required`, `status`, `submitted_by`, `reviewed_by`, `reviewed_at`, `review_notes`, `submitted_at`
+- **lessons:** `id`, `module_id`, `title`, `type` (CHECK `video`/`text`/`quiz`/`assignment` — **not** `pdf`), `"order"`, `duration`, `start_page`
+- **resources:** `id`, `module_id`, `type` (CHECK `pdf`/`video`/`link`/`document`), `path`
+
 ### Content model (how PDFs are structured — match this exactly)
 A module has **one `resources` row** (`type='pdf'`, `module_id` FK) — the uploaded PDF — plus **lessons rows** (`type='text'`, 100% of the 189 live lessons) that act as section markers, each with a `start_page` into that PDF. Never create a `type='pdf'` lesson. PDFs render client-side via `react-pdf`/pdfjs (see `components/courses/pdf-viewer.tsx`), signed URL fetched directly from Supabase Storage (`course-materials` bucket, 24h expiry) — no third-party proxy.
 
@@ -52,6 +62,7 @@ A module has **one `resources` row** (`type='pdf'`, `module_id` FK) — the uplo
 | `006` (learningpath_id) | reconcile `learningpath_courses.learningpath_id` naming drift |
 | `007_enrollments_unique_user_course.sql` | add missing `UNIQUE(user_id, course_id)` (prevents dup enrollments/double-count) |
 | `008_phase3_instructor_content_workflow.sql` | instructor role + workflow (see below) |
+| `009_lock_review_edits_and_submitted_at.sql` | `modules.submitted_at`; `modules_instructor_update` USING now also requires current status `draft`/`rejected` — instructor cannot edit a module under review (and cannot self-withdraw a submission; admin-only). WITH CHECK unchanged from 008. |
 
 ### Migration 008 — Phase 3 schema foundation (applied)
 - `users.is_instructor` bool + `is_instructor()` helper (mirrors `is_admin()`: sql/STABLE/SECURITY DEFINER/search_path=public).
