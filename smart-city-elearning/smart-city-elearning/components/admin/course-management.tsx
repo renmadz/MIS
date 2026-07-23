@@ -3,8 +3,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BookOpen, Search, Plus, MoreHorizontal, Users, Clock, Star, Edit, Eye, Trash2 } from "lucide-react"
+import { BookOpen, Search, MoreHorizontal, Users, Clock, Star, Edit, Eye, Trash2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { CreateCourseForm } from "@/components/admin/create-course-form"
 
 export function CourseManagement() {
   const courses = [
@@ -70,10 +71,7 @@ export function CourseManagement() {
           <h1 className="text-3xl font-bold text-foreground font-serif">Course Management</h1>
           <p className="text-muted-foreground">Create and manage learning content</p>
         </div>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" />
-          Create Course
-        </Button>
+        <CreateCourseForm />
       </div>
 
       {/* Stats */}

@@ -12,6 +12,7 @@ export interface User {
   created_at: string
   updated_at: string
   is_admin?: boolean;
+  is_instructor?: boolean;
   status?: "pending" | "active" | "inactive";
 }
 
@@ -26,6 +27,7 @@ export interface Course {
   prerequisites: string[] | null
   thumbnail: string
   instructor: string
+  instructor_id?: string | null
   rating: number | null
   enrollment_count: number | null
   is_active: boolean
