@@ -39,6 +39,8 @@ export async function middleware(request: NextRequest) {
     '/learning-paths/*',
     '/admin',
     '/admin/*',
+    '/instructor',
+    '/instructor/*',
   ];
 
   // Redirect to login if not authenticated on a protected route
@@ -65,6 +67,29 @@ export async function middleware(request: NextRequest) {
 
     if (profileError || !data?.is_admin) {
       console.error('Middleware profile error:', profileError?.message || 'Not an admin');
+      return NextResponse.redirect(new URL('/dashboard', request.url));
+    }
+  }
+
+  // /instructor requires is_instructor AND an active account — the same pair the
+  // instructor RLS policies check (is_instructor() AND is_active_user()), so the
+  // UI never shows a surface the database will refuse to write to.
+  if (pathname.startsWith('/instructor')) {
+    if (!user) {
+      return NextResponse.redirect(new URL('/login', request.url));
+    }
+
+    const { data, error: profileError } = await supabase
+      .from('users')
+      .select('is_instructor, status')
+      .eq('id', user.id)
+      .single();
+
+    if (profileError || !data?.is_instructor || data.status !== 'active') {
+      console.error(
+        'Middleware profile error:',
+        profileError?.message || 'Not an active instructor'
+      );
       return NextResponse.redirect(new URL('/dashboard', request.url));
     }
   }
