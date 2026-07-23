@@ -8,8 +8,16 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, CheckCircle, Book, AlertCircle } from "lucide-react"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
 import type { Module, Lesson, Resource } from "@/lib/types/database"
-import { PdfViewer } from "@/components/courses/pdf-viewer"
+import dynamic from "next/dynamic"
 import Confetti from "react-confetti"
+
+// react-pdf (pdfjs) touches browser-only APIs (DOMMatrix) at import time, which
+// crashes server rendering. Load the viewer client-only so it never runs on the
+// server; the PDF is rendered in the browser regardless.
+const PdfViewer = dynamic(
+  () => import("@/components/courses/pdf-viewer").then((m) => m.PdfViewer),
+  { ssr: false }
+)
 
 // Minimal interface for module query result
 interface ModuleQueryResult {
