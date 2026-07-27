@@ -16,47 +16,31 @@ import {
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
-import { getUserByEmail } from "@/lib/database/client-queries"
-import type { User } from "@/lib/types/database"
+import { useUser } from "@/components/providers/user-provider"
 
 export function Header() {
   const router = useRouter()
   const pathname = usePathname()
-  const [user, setUser] = useState<User | null>(null)
+  const { profile: user, loading: isLoading } = useUser()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
 
+  // Avatar signed URL follows the shared profile's avatar path. The profile
+  // itself comes from the shared context (no per-header getUser()).
   useEffect(() => {
-    const fetchUser = async () => {
-      setIsLoading(true)
-      try {
-        const { data: { user: authUser } } = await supabaseBrowser.auth.getUser()
-        if (authUser?.email) {
-          const userData = await getUserByEmail(authUser.email)
-          setUser(userData)
-          if (userData?.avatar) {
-            const { data, error } = await supabaseBrowser.storage
-              .from("avatars")
-              .createSignedUrl(userData.avatar, 3600) // 1 hour expiration
-            if (error) {
-              setAvatarUrl(null)
-            } else {
-              setAvatarUrl(data.signedUrl)
-            }
-          }
-        } else {
-          setUser(null)
-          setAvatarUrl(null)
-        }
-      } catch (err) {
-        setUser(null)
+    let cancelled = false
+    const loadAvatar = async () => {
+      if (!user?.avatar) {
         setAvatarUrl(null)
-      } finally {
-        setIsLoading(false)
+        return
       }
+      const { data, error } = await supabaseBrowser.storage
+        .from("avatars")
+        .createSignedUrl(user.avatar, 3600) // 1 hour expiration
+      if (!cancelled) setAvatarUrl(error ? null : data.signedUrl)
     }
-    fetchUser()
-  }, [])
+    loadAvatar()
+    return () => { cancelled = true }
+  }, [user?.avatar])
 
   const handleLogout = async () => {
     try {

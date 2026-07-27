@@ -1,63 +1,33 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { supabaseBrowser } from '@/lib/supabase/browser-client';
+import { useEffect } from 'react';
+import { useUser } from '@/components/providers/user-provider';
 
 /**
- * Client-side mirror of AdminGuard for instructor pages. Middleware is the real
- * gate; this exists for the same reason AdminGuard does — defence in depth and a
- * clean redirect if the profile changes mid-session. Checks is_instructor AND
- * status='active', matching is_instructor() AND is_active_user() in RLS.
+ * Soft client-side gate for instructor pages, mirroring AdminGuard. Reads the
+ * shared user context instead of its own getUser()+users select. Checks
+ * is_instructor AND status='active' (matching is_instructor() AND
+ * is_active_user() in RLS). Middleware is the authoritative server-side gate.
  */
 export function InstructorGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { profile, loading } = useUser();
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        setIsLoading(true);
-        const { data: { user }, error: authError } = await supabaseBrowser.auth.getUser();
-        if (authError) throw new Error(authError.message);
-        if (!user) {
-          router.push('/login');
-          return;
-        }
+    if (loading) return;
+    if (!profile) {
+      router.push('/login');
+      return;
+    }
+    if (!profile.is_instructor || profile.status !== 'active') {
+      router.push('/dashboard');
+    }
+  }, [loading, profile, router]);
 
-        const { data, error: profileError } = await supabaseBrowser
-          .from('users')
-          .select('is_instructor, status')
-          .eq('id', user.id)
-          .single();
-
-        if (profileError) {
-          console.error('Profile fetch error:', profileError.message);
-          throw new Error('Failed to fetch user profile');
-        }
-        if (!data?.is_instructor || data.status !== 'active') {
-          router.push('/dashboard');
-          return;
-        }
-      } catch (err: any) {
-        setError(err.message || 'Failed to authenticate user');
-        console.error('Auth error:', err);
-        router.push('/dashboard');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchUser();
-  }, [router]);
-
-  if (isLoading) {
+  const allowed = !!profile?.is_instructor && profile?.status === 'active';
+  if (loading || !allowed) {
     return <div className="text-center p-6">Loading...</div>;
-  }
-
-  if (error) {
-    return <div className="text-center p-6 text-red-600">{error}</div>;
   }
 
   return <>{children}</>;

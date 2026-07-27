@@ -1,6 +1,5 @@
 "use client"
 
-import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -16,28 +15,13 @@ import {
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
+import { useUser } from "@/components/providers/user-provider"
 
 export function InstructorHeader() {
   const router = useRouter()
-  const [name, setName] = useState<string>("Instructor")
-  const [email, setEmail] = useState<string>("")
-
-  useEffect(() => {
-    const fetchUser = async () => {
-      const { data: { user } } = await supabaseBrowser.auth.getUser()
-      if (!user) return
-      setEmail(user.email ?? "")
-
-      const { data } = await supabaseBrowser
-        .from("users")
-        .select("name")
-        .eq("id", user.id)
-        .single()
-
-      if (data?.name) setName(data.name)
-    }
-    fetchUser()
-  }, [])
+  const { profile } = useUser()
+  const name = profile?.name || "Instructor"
+  const email = profile?.email ?? ""
 
   const handleLogout = async () => {
     await supabaseBrowser.auth.signOut()

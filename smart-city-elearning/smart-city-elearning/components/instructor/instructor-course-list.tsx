@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
+import { useUser } from "@/components/providers/user-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -38,23 +39,29 @@ const STATUS_LABEL: Record<string, string> = {
 }
 
 export function InstructorCourseList() {
+  const { profile, loading: userLoading } = useUser()
   const [courses, setCourses] = useState<CourseRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (userLoading) return
+    const userId = profile?.id
+    if (!userId) {
+      setLoading(false)
+      return
+    }
+
     const load = async () => {
       try {
-        const { data: { user } } = await supabaseBrowser.auth.getUser()
-        if (!user) return
-
         // Ownership filter is explicit here as well as enforced by RLS —
         // courses_public_read exposes every active course, so the scoping to
-        // "my courses" has to come from this query.
+        // "my courses" has to come from this query. The id comes from the shared
+        // user context (no per-component getUser()).
         const { data, error: queryError } = await supabaseBrowser
           .from("courses")
           .select("id, title, category, is_active, modules(id, title, status, order, submitted_at, review_notes)")
-          .eq("instructor_id", user.id)
+          .eq("instructor_id", userId)
           .order("title")
         if (queryError) throw new Error(queryError.message)
 
@@ -71,7 +78,7 @@ export function InstructorCourseList() {
       }
     }
     load()
-  }, [])
+  }, [profile?.id, userLoading])
 
   if (loading) return <div className="text-center p-6">Loading...</div>
   if (error) return <div className="text-center p-6 text-red-600">{error}</div>
