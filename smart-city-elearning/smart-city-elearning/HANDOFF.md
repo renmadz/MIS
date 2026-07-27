@@ -63,6 +63,8 @@ A module has **one `resources` row** (`type='pdf'`, `module_id` FK) — the uplo
 | `007_enrollments_unique_user_course.sql` | add missing `UNIQUE(user_id, course_id)` (prevents dup enrollments/double-count) |
 | `008_phase3_instructor_content_workflow.sql` | instructor role + workflow (see below) |
 | `009_lock_review_edits_and_submitted_at.sql` | `modules.submitted_at`; `modules_instructor_update` USING now also requires current status `draft`/`rejected` — instructor cannot edit a module under review (and cannot self-withdraw a submission; admin-only). WITH CHECK unchanged from 008. |
+| `010_instructor_delete_own_draft_content.sql` | instructor DELETE on `lessons`+`resources`, scoped to own course AND module status `draft`/`rejected`. 008 gave instructors no delete, so the module editor's delete-then-reinsert save silently no-op'd the delete under RLS and **duplicated** the lesson list. Editor also hardened: it counts rows after the delete and refuses to write if any survive. |
+| `011_tighten_course_materials_storage.sql` | close the `course-materials` storage hole. Replaced 3 permissive SELECT policies (any authenticated user could read ANY object) with one mirroring `resources_enrolled_read`, keyed off the path's module id `(storage.foldername(name))[4]`. Replaced the loose INSERT (any authenticated user could upload) with owner-scoped INSERT+UPDATE, frozen to module status `draft`/`rejected` (review-freeze, same as 009). Bucket: `file_size_limit=52428800` (50MB), `allowed_mime_types={application/pdf}`. |
 
 ### Migration 008 — Phase 3 schema foundation (applied)
 - `users.is_instructor` bool + `is_instructor()` helper (mirrors `is_admin()`: sql/STABLE/SECURITY DEFINER/search_path=public).
@@ -79,16 +81,29 @@ Wired `get_unmet_prerequisites()` into all three points — no duplicated logic:
 2. **Course detail** (`app/courses/[id]/page.tsx`): computes unmet prereqs, header shows locked state + disabled "Locked" button.
 3. **Module URL** (`app/courses/[id]/module/[moduleId]/page.tsx`): now a **server component** that gates before `ModuleContent` mounts — real enforcement, blocks even a stale/retroactive enrollment row.
 
+### Phase 3 UI — instructor + admin content workflow (built, verified end-to-end)
+Staged build; each stage verified with disposable fixtures (real user JWTs, exact-id cleanup) before proceeding. Migrations 010/011 applied live. **Commit status:** access/layout + Create Course + instructor upload committed; the admin review queue batch (`app/admin/review/`, `review-queue.tsx`, `review-detail.tsx`, `admin-sidebar.tsx` badge, `module-editor.tsx` "Edit & Resubmit") may still be uncommitted — check `git status`.
+- **Access + layout:** `/instructor/*` gated in `middleware.ts` on `is_instructor AND status='active'` (mirrors the RLS pair). `InstructorHeader`/`InstructorSidebar`/`InstructorGuard` mirror the admin trio. Discovery links added to the shared `components/ui/header.tsx` dropdown: "Admin Panel" (if `is_admin`), "Instructor Panel" (if `is_instructor`) — both can show at once.
+- **Admin Create Course** (`components/admin/create-course-form.tsx`, wired into the still-mock `course-management.tsx`, replacing only the inert button): real insert via `courses_admin_write`. Instructor dropdown (`is_instructor AND active`), prerequisites tag input with live `suggest_course_titles()` "did you mean" + exact-match checkmark, non-blocking. Edit/Delete/list/stats there remain MOCK (QA finding #3).
+- **Instructor module upload** (`components/instructor/instructor-course-list.tsx`, `module-editor.tsx`, route `app/instructor/courses/[courseId]/modules/[moduleId]/`): instructor sees only own courses (`instructor_id=auth.uid()`; RLS `courses_public_read` exposes all active, so the query does the scoping). New module → `draft`. One `resources` (type='pdf') + `lessons` (type='text', ascending `start_page`) via the embedded PDF viewer — "Add at page N" reads the page the viewer is on (`onPageChange`/`onDocumentLoad` callbacks added to `pdf-viewer.tsx`). Save draft / Submit for review (→ pending_review, submitted_by, submitted_at).
+- **Admin review queue** (`components/admin/review-queue.tsx`, `review-detail.tsx`, routes `app/admin/review/` + `[moduleId]/`): pending_review list oldest-first w/ course + instructor name; detail embeds the PDF viewer + section breakdown; approve → published, reject → rejected (notes REQUIRED, no auto-reset). Live "N pending" badge in `admin-sidebar.tsx` (head+count). Instructor "Edit & Resubmit" on rejected modules → draft.
+
+---
+
+## Environment / testing gotchas (learned this session)
+- **Middleware `getUser()` fetch flakes on IPv6** (the same undici issue as scripts). Symptom: `Error: fetch failed` in the middleware stack → protected routes redirect to `/login` intermittently → Playwright/browsers land on login at random. **Fix: start the dev server with `NODE_OPTIONS=--dns-result-order=ipv4first npm run dev`.** For curl/node scripts, use `curl -4` (retry on exit 28).
+- **Storage objects cannot be deleted via SQL** — `storage.protect_delete()` raises `42501`. Delete through the Storage API: `curl -X DELETE "$URL/storage/v1/object/course-materials" -H "apikey: $SVC" -H "Authorization: Bearer $SVC" -H "Content-Type: application/json" -d '{"prefixes":["<exact/object/path>", ...]}'`. Returns the deleted names as its receipt. `storage.buckets` (size/mime limits) *is* updatable via SQL.
+- **Playwright is available in the scratchpad** (`npm i playwright` + `npx playwright install chromium`), not the project. Browser tests build a real `sb-<ref>-auth-token` cookie (base64- prefix, chunked at 3180) from a password sign-in to drive the actual middleware/RLS.
+- **Real accounts created this session** (not fixtures): `renmaddara02@gmail.com` (Darren Maddara, `is_instructor`, active) and `admin.test@example.com` (Admin Test, `is_admin`). This is why the live user count is 13, not the earlier 11.
+
 ---
 
 ## What's next (do NOT start without a planning prompt)
 
-1. **Instructor dashboard UI (net-new):** assign-instructor, create module shells, upload PDF (as `resources` type='pdf') + section lessons (type='text' + start_page), submit-for-review, see review status. All RLS is ready; UI does not exist.
-2. **Admin review queue (net-new):** approve/reject modules with notes (sets status published/rejected, reviewed_by/at, review_notes). Admin write RLS ready.
-3. **Wire `suggest_course_titles()`** into course/prerequisite title inputs as a non-blocking nudge.
-4. **Admin management pages are still MOCK data** (original QA finding #3): `course-management.tsx`, `user-management.tsx`, `analytics-dashboard.tsx` render hardcoded arrays; working API routes (`/api/users`, `/api/analytics`, `/api/admin/logs`) exist but are unused. Sidebar advertises 10 routes; only `/admin`, `/admin/users`, `/admin/courses`, `/admin/analytics` exist.
-5. **Before building instructor lesson-upload:** dump `lessons` table constraints (only `courses/modules/resources/enrollments` were dumped so far) so the form writes valid values.
-6. **Enabling Confirm email** would additionally require: custom SMTP (built-in mailer rate-limits signups into 429) AND moving profile creation to a post-confirmation step (DB trigger/auth-callback) — the inline insert needs the immediate session that only exists when confirmation is off.
+1. **Admin management pages are still MOCK data** (original QA finding #3): `course-management.tsx` (except the now-real Create Course dialog), `user-management.tsx`, `analytics-dashboard.tsx` render hardcoded arrays; working API routes (`/api/users`, `/api/analytics`, `/api/admin/logs`) exist but are unused. Sidebar advertises many routes; only `/admin`, `/admin/users`, `/admin/courses`, `/admin/analytics`, `/admin/review` exist. Course Management's Edit/Delete/list/stats are still mock.
+2. **Wire `suggest_course_titles()` more widely:** only the Create Course prerequisites field uses it so far. Course title / other prerequisite inputs could get the same non-blocking nudge.
+3. **Enabling Confirm email** would additionally require: custom SMTP (built-in mailer rate-limits signups into 429) AND moving profile creation to a post-confirmation step (DB trigger/auth-callback) — the inline insert needs the immediate session that only exists when confirmation is off.
+4. **Storage review-freeze consequence:** an instructor cannot replace a module's PDF while it's `pending_review` (011 mirrors the 009 lock). If admins ever need to hand a PDF back for reswap without a full reject, that's a new flow.
 
 ---
 

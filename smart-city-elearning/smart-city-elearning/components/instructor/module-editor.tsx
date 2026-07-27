@@ -572,7 +572,7 @@ export function ModuleEditor({
         )}
         {status === "rejected" && (
           <Button variant="secondary" onClick={reopenForEditing} disabled={busy}>
-            Reopen for editing
+            Edit &amp; Resubmit
           </Button>
         )}
       </div>

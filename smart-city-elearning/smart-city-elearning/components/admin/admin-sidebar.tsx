@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import {
@@ -15,12 +16,27 @@ import {
   MapPin,
   Calendar,
   MessageSquare,
+  ClipboardCheck,
 } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { supabaseBrowser } from "@/lib/supabase/browser-client"
 
 export function AdminSidebar() {
   const pathname = usePathname()
+  const [pendingCount, setPendingCount] = useState<number | null>(null)
+
+  // Live "N pending" for the review queue. head+count avoids fetching rows.
+  useEffect(() => {
+    const load = async () => {
+      const { count } = await supabaseBrowser
+        .from("modules")
+        .select("id", { count: "exact", head: true })
+        .eq("status", "pending_review")
+      setPendingCount(count ?? 0)
+    }
+    load()
+  }, [])
 
   const menuItems = [
     {
@@ -39,6 +55,12 @@ export function AdminSidebar() {
       href: "/admin/courses",
       icon: BookOpen,
       badge: "24",
+    },
+    {
+      title: "Content Review",
+      href: "/admin/review",
+      icon: ClipboardCheck,
+      badge: pendingCount != null && pendingCount > 0 ? String(pendingCount) : undefined,
     },
     {
       title: "Certificates",
