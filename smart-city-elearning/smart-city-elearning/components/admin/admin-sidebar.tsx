@@ -25,15 +25,22 @@ import { supabaseBrowser } from "@/lib/supabase/browser-client"
 export function AdminSidebar() {
   const pathname = usePathname()
   const [pendingCount, setPendingCount] = useState<number | null>(null)
+  const [userCount, setUserCount] = useState<number | null>(null)
+  const [courseCount, setCourseCount] = useState<number | null>(null)
 
-  // Live "N pending" for the review queue. head+count avoids fetching rows.
+  // Real counts for nav badges. head+count avoids fetching rows. Badges are only
+  // shown for nav items whose page actually exists (Users, Courses, Review);
+  // dead links (Certificates, Messages, ...) carry no badge.
   useEffect(() => {
     const load = async () => {
-      const { count } = await supabaseBrowser
-        .from("modules")
-        .select("id", { count: "exact", head: true })
-        .eq("status", "pending_review")
-      setPendingCount(count ?? 0)
+      const [pending, users, courses] = await Promise.all([
+        supabaseBrowser.from("modules").select("id", { count: "exact", head: true }).eq("status", "pending_review"),
+        supabaseBrowser.from("users").select("id", { count: "exact", head: true }),
+        supabaseBrowser.from("courses").select("id", { count: "exact", head: true }),
+      ])
+      setPendingCount(pending.count ?? 0)
+      setUserCount(users.count ?? null)
+      setCourseCount(courses.count ?? null)
     }
     load()
   }, [])
@@ -48,13 +55,13 @@ export function AdminSidebar() {
       title: "User Management",
       href: "/admin/users",
       icon: Users,
-      badge: "1,247",
+      badge: userCount != null ? userCount.toLocaleString() : undefined,
     },
     {
       title: "Course Management",
       href: "/admin/courses",
       icon: BookOpen,
-      badge: "24",
+      badge: courseCount != null ? courseCount.toLocaleString() : undefined,
     },
     {
       title: "Content Review",
@@ -66,7 +73,6 @@ export function AdminSidebar() {
       title: "Certificates",
       href: "/admin/certificates",
       icon: Award,
-      badge: "892",
     },
     {
       title: "Analytics",
@@ -97,7 +103,6 @@ export function AdminSidebar() {
       title: "Messages",
       href: "/admin/messages",
       icon: MessageSquare,
-      badge: "12",
     },
   ]
 
