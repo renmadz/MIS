@@ -168,6 +168,15 @@ export function CreateCourseForm() {
       })
       if (insertError) throw new Error(insertError.message)
 
+      // Drop the cached public catalog so the new course appears immediately
+      // instead of waiting out the ISR window. Best-effort — a failure here just
+      // means it appears on the next revalidation.
+      fetch("/api/revalidate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: "/courses" }),
+      }).catch(() => {})
+
       reset()
       setOpen(false)
       router.refresh()

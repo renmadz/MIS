@@ -28,6 +28,7 @@ export function ReviewDetail({ moduleId }: { moduleId: string }) {
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [status, setStatus] = useState("")
+  const [courseId, setCourseId] = useState<string | null>(null)
   const [courseTitle, setCourseTitle] = useState("")
   const [instructorName, setInstructorName] = useState("")
   const [submittedAt, setSubmittedAt] = useState<string | null>(null)
@@ -51,6 +52,7 @@ export function ReviewDetail({ moduleId }: { moduleId: string }) {
         setTitle(mod.title ?? "")
         setDescription(mod.description ?? "")
         setStatus(mod.status)
+        setCourseId(mod.course_id)
         setSubmittedAt(mod.submitted_at)
         setEstimatedDuration(mod.estimated_duration)
         setIsRequired(mod.is_required)
@@ -113,6 +115,16 @@ export function ReviewDetail({ moduleId }: { moduleId: string }) {
         })
         .eq("id", moduleId)
       if (updateError) throw new Error(updateError.message)
+
+      // Publishing changes what the public course page shows — drop its cache so
+      // the newly published module appears immediately. Best-effort.
+      if (decision === "published" && courseId) {
+        fetch("/api/revalidate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ path: `/courses/${courseId}` }),
+        }).catch(() => {})
+      }
 
       router.push("/admin/review")
       router.refresh()

@@ -1,148 +1,46 @@
-// app/courses/[id]/page.tsx
-"use client"
+import { CourseDetailClient } from "@/components/courses/course-detail-client"
+import type { Course } from "@/lib/types/database"
 
-import { useState, useEffect } from "react"
-import { useParams } from "next/navigation"
-import { Header } from "@/components/ui/header"
-import { CourseHeader } from "@/components/courses/course-header"
-import { CourseContent } from "@/components/courses/course-content" // Ensure correct import
-import { CourseSidebar } from "@/components/courses/course-sidebar"
-import { Loader2 } from "lucide-react"
-import { supabaseBrowser } from "@/lib/supabase/browser-client"
-import type { Course, Enrollment, Module } from "@/lib/types/database"
+// Server shell: renders only the public, course-level meta (cacheable, anon).
+// Per-user content (modules/lessons, enrollment, prerequisites, progress) lives
+// in CourseDetailClient with the real session — never cached, so prerequisite
+// enforcement and instructor-owner unpublished visibility are unchanged.
+//
+// The meta is read via a CACHED native fetch (next.revalidate) rather than
+// supabase-js: supabase-js issues an uncached fetch, which would force the whole
+// dynamic [id] route into per-request rendering (no-store). A cached fetch keeps
+// it ISR — one render per course per 300s window, shared across users.
+export const revalidate = 300
 
-// Define a minimal type for progress data relevant to this component
-interface ProgressDataItem {
-  lesson_id: string;
-  completed: boolean;
-  module_id: string; // Although not directly used for lesson check, useful for grouping if needed
+// Opt the dynamic [id] segment into static generation. Returning [] pre-renders
+// nothing at build; each course is rendered on first request and then ISR-cached
+// per `revalidate`. Without this, Next 15 renders the segment fully dynamic
+// (no-store) even with a cached fetch. dynamicParams defaults to true, so unknown
+// ids still render on demand.
+export async function generateStaticParams() {
+  return []
 }
 
-export default function CoursePage() {
-  const { id } = useParams()
-  const [course, setCourse] = useState<Course | null>(null)
-  const [enrollment, setEnrollment] = useState<Enrollment | null>(null)
-  const [progressData, setProgressData] = useState<ProgressDataItem[] | null>(null); // State for progress data
-  const [unmetPrereqs, setUnmetPrereqs] = useState<string[]>([]) // Unmet prerequisite course titles
-  const [isLoading, setIsLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+const COLS =
+  "id,title,description,category,level,duration,thumbnail,rating,enrollment_count,target_audience,is_active,instructor,prerequisites"
 
-  useEffect(() => {
-    const fetchCourseAndEnrollment = async () => {
-      setIsLoading(true)
-      setError(null); // Reset error on new fetch
-      try {
-        // Fetch course with nested modules and lessons
-        // Explicit columns only — the detail components render these; the old
-        // `courses.*, modules(*)` also pulled skills/timestamps/instructor_id and
-        // every module column the page never reads.
-        const { data: courseData, error: courseError } = await supabaseBrowser
-          .from('courses')
-          .select('id, title, description, category, level, duration, thumbnail, rating, enrollment_count, target_audience, is_active, instructor, prerequisites, modules(id, title, description, order, estimated_duration, is_required, lessons(id, module_id, title, type, order, duration, start_page))')
-          .eq('id', id)
-          .single<Course>()
-
-        if (courseError) throw courseError
-        // Sort modules and lessons
-        if (courseData.modules) {
-          courseData.modules.sort((a: Module, b: Module) => a.order - b.order)
-          courseData.modules.forEach((mod: Module) => {
-            if (mod.lessons) mod.lessons.sort((a: any, b: any) => a.order - b.order)
-          })
-        }
-        setCourse(courseData)
-
-        // Fetch enrollment
-        const { data: { user } } = await supabaseBrowser.auth.getUser()
-        let userEnrollment: Enrollment | null = null;
-        if (user?.id) {
-          const { data: enrollmentData, error: enrollmentError } = await supabaseBrowser
-            .from('enrollments')
-            .select('*')
-            .eq('course_id', id)
-            .eq('user_id', user.id)
-            .maybeSingle()
-
-          if (enrollmentError && enrollmentError.code !== 'PGRST116') throw enrollmentError
-          userEnrollment = enrollmentData || null;
-          setEnrollment(userEnrollment);
-
-          // Compute unmet prerequisites (single source of truth) so the header can
-          // show a locked state when the user is not yet enrolled.
-          const { data: unmetData } = await supabaseBrowser.rpc('get_unmet_prerequisites', {
-            p_course_id: id,
-          })
-          setUnmetPrereqs(Array.isArray(unmetData) ? unmetData : [])
-
-          // --- Fetch Progress Data if enrolled ---
-          if (userEnrollment) {
-             const { data: progressDataResult, error: progressError } = await supabaseBrowser
-              .from('progress')
-              .select('lesson_id, completed, module_id') // Select relevant fields
-              .eq('user_id', user.id)
-              .eq('course_id', id)
-              .not('lesson_id', 'is', null); // Only get lesson-specific progress
-
-            if (progressError) {
-                // Don't throw, just log and proceed without progress data
-                setProgressData([]); // Set empty array if error
-            } else {
-                setProgressData(progressDataResult || []);
-            }
-          } else {
-              setProgressData([]); // No enrollment, no progress
-          }
-          // --- End Fetch Progress Data ---
-        } else {
-             setProgressData([]); // No user, no progress
-        }
-      } catch (err: any) {
-        setError("Failed to load course. Please try again.")
-        setProgressData([]); // Ensure progressData is set even on error
-      } finally {
-        setIsLoading(false)
-      }
+async function getCourseMeta(id: string): Promise<Course | null> {
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL!
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  const res = await fetch(
+    `${base}/rest/v1/courses?id=eq.${encodeURIComponent(id)}&select=${COLS}`,
+    {
+      headers: { apikey: anon, Authorization: `Bearer ${anon}` },
+      next: { revalidate: 300 },
     }
-    fetchCourseAndEnrollment()
-  }, [id])
-
-  if (isLoading) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8 flex justify-center">
-          <Loader2 className="h-8 w-8 animate-spin" />
-        </div>
-      </div>
-    )
-  }
-
-  if (error || !course) {
-    return (
-      <div className="min-h-screen bg-background">
-        <Header />
-        <div className="container mx-auto px-4 py-8">
-          <p className="text-red-600">{error || "Course not found."}</p>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="min-h-screen bg-background">
-      <Header />
-      <div className="container mx-auto px-4 py-8">
-        <CourseHeader courseId={course.id} course={course} enrollment={enrollment} unmetPrereqs={unmetPrereqs} />
-        <div className="grid lg:grid-cols-4 gap-8 mt-8">
-          <div className="lg:col-span-3">
-            {/* Pass enrollment and progressData props */}
-            <CourseContent courseId={course.id} course={course} enrollment={enrollment} progressData={progressData} />
-          </div>
-          <div className="lg:col-span-1">
-            <CourseSidebar courseId={course.id} enrollment={enrollment} course={course} />
-          </div>
-        </div>
-      </div>
-    </div>
   )
+  if (!res.ok) return null
+  const rows = (await res.json()) as Course[]
+  return rows[0] ?? null
+}
+
+export default async function CoursePage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const course = await getCourseMeta(id)
+  return <CourseDetailClient courseId={id} course={course} />
 }

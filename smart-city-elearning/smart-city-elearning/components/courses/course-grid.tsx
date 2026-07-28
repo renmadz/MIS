@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CourseCard } from "./course-card";
 import { Loader2 } from "lucide-react";
 import type { Course } from "@/lib/types/database";
@@ -13,14 +13,36 @@ interface CourseGridProps {
     duration?: { min?: number; max?: number };
   };
   search?: string;
+  // Server-rendered initial list (unfiltered active catalog). Seeds the grid so
+  // the first paint needs no client fetch.
+  initialCourses?: Course[];
 }
 
-export function CourseGrid({ filters, search }: CourseGridProps) {
-  const [courses, setCourses] = useState<Course[]>([]);
+export function CourseGrid({ filters, search, initialCourses = [] }: CourseGridProps) {
+  const [courses, setCourses] = useState<Course[]>(initialCourses);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const firstRun = useRef(true);
 
   useEffect(() => {
+    // Skip ONLY the first mount when nothing is filtered/searched — the
+    // server-provided initialCourses already covers that case. Every later
+    // filter/search change still goes through the debounced fetch below.
+    const noQuery =
+      !filters.level &&
+      !filters.category &&
+      !(filters.target_audience?.length) &&
+      !filters.duration?.min &&
+      !filters.duration?.max &&
+      !search;
+    if (firstRun.current) {
+      firstRun.current = false;
+      // Only trust the server data when it's actually present. If the server
+      // render produced an empty list (e.g. a build-time fetch failure), fall
+      // through and fetch on the client so the catalog isn't stuck empty.
+      if (noQuery && initialCourses.length > 0) return;
+    }
+
     // Debounce so typing fires one request after a pause, not one per keystroke.
     // The AbortController cancels any in-flight request when a newer change
     // supersedes it, so a stale response can never overwrite a newer one.
