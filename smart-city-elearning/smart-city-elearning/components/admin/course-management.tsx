@@ -1,233 +1,300 @@
+"use client"
+
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { supabaseBrowser } from "@/lib/supabase/browser-client"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BookOpen, Search, MoreHorizontal, Users, Clock, Star, Edit, Eye, Trash2 } from "lucide-react"
+import { BookOpen, Search, MoreHorizontal, Users, Clock, Star, Edit, Eye, Power, PowerOff, Loader2 } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { CreateCourseForm } from "@/components/admin/create-course-form"
+import {
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
+  AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import Link from "next/link"
+import { CreateCourseForm, CourseFormDialog, type EditableCourse } from "@/components/admin/create-course-form"
+
+type CourseRow = EditableCourse & {
+  rating: number | null
+  enrollment_count: number | null
+  moduleCount: number
+  completedCount: number
+}
+
+function revalidateCatalog() {
+  fetch("/api/revalidate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: "/courses" }),
+  }).catch(() => {})
+}
 
 export function CourseManagement() {
-  const courses = [
-    {
-      id: "iot-fundamentals",
-      title: "IoT Fundamentals for Smart Cities",
-      instructor: "Dr. Maria Santos",
-      category: "Technology",
-      level: "Beginner",
-      status: "Published",
-      enrollments: 1250,
-      completions: 812,
-      rating: 4.8,
-      duration: "4 weeks",
-      modules: 8,
-      createdDate: "2024-01-15",
-      lastUpdated: "2024-11-20",
-    },
-    {
-      id: "data-analytics",
-      title: "Smart City Data Analytics",
-      instructor: "Prof. Juan Dela Cruz",
-      category: "Analytics",
-      level: "Intermediate",
-      status: "Published",
-      enrollments: 890,
-      completions: 534,
-      rating: 4.9,
-      duration: "6 weeks",
-      modules: 12,
-      createdDate: "2024-02-10",
-      lastUpdated: "2024-12-01",
-    },
-    {
-      id: "digital-governance",
-      title: "Digital Governance and E-Services",
-      instructor: "Dir. Carlos Reyes",
-      category: "Governance",
-      level: "Intermediate",
-      status: "Draft",
-      enrollments: 0,
-      completions: 0,
-      rating: 0,
-      duration: "5 weeks",
-      modules: 10,
-      createdDate: "2024-12-05",
-      lastUpdated: "2024-12-10",
-    },
+  const [courses, setCourses] = useState<CourseRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [search, setSearch] = useState("")
+
+  const [editing, setEditing] = useState<CourseRow | null>(null)
+  const [editOpen, setEditOpen] = useState(false)
+  const [pendingToggle, setPendingToggle] = useState<CourseRow | null>(null)
+  const [working, setWorking] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      // Admin sees ALL courses (courses_public_read allows is_admin), unlike the
+      // public catalog which is is_active-only.
+      const { data, error: qErr } = await supabaseBrowser
+        .from("courses")
+        .select(
+          "id, title, description, category, level, duration, target_audience, prerequisites, thumbnail, instructor, instructor_id, is_active, rating, enrollment_count, modules(count)"
+        )
+        .order("title")
+      if (qErr) throw new Error(qErr.message)
+
+      // Completed-enrollment counts per course (one small query, grouped client-side).
+      const { data: enr } = await supabaseBrowser
+        .from("enrollments")
+        .select("course_id, status")
+      const completedByCourse: Record<string, number> = {}
+      for (const e of enr ?? []) {
+        if (e.status === "completed") completedByCourse[e.course_id] = (completedByCourse[e.course_id] || 0) + 1
+      }
+
+      setCourses(
+        (data ?? []).map((c: any) => ({
+          ...c,
+          moduleCount: Array.isArray(c.modules) && c.modules[0] ? c.modules[0].count : 0,
+          completedCount: completedByCourse[c.id] ?? 0,
+        }))
+      )
+    } catch (err: any) {
+      setError(err.message || "Failed to load courses.")
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const stats = useMemo(() => {
+    const total = courses.length
+    const active = courses.filter((c) => c.is_active).length
+    const inactive = total - active
+    const totalEnrollments = courses.reduce((s, c) => s + (c.enrollment_count || 0), 0)
+    return { total, active, inactive, totalEnrollments }
+  }, [courses])
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase()
+    if (!q) return courses
+    return courses.filter((c) =>
+      c.title.toLowerCase().includes(q) ||
+      c.category.toLowerCase().includes(q) ||
+      c.instructor.toLowerCase().includes(q)
+    )
+  }, [courses, search])
+
+  const activeCourses = filtered.filter((c) => c.is_active)
+  const inactiveCourses = filtered.filter((c) => !c.is_active)
+
+  const toggleActive = async (course: CourseRow, next: boolean) => {
+    setWorking(true)
+    try {
+      const { error: uErr } = await supabaseBrowser
+        .from("courses")
+        .update({ is_active: next })
+        .eq("id", course.id)
+      if (uErr) throw new Error(uErr.message)
+      revalidateCatalog()
+      setCourses((prev) => prev.map((c) => (c.id === course.id ? { ...c, is_active: next } : c)))
+    } catch (err: any) {
+      setError(err.message || "Failed to update course status.")
+    } finally {
+      setWorking(false)
+      setPendingToggle(null)
+    }
+  }
+
+  const statCards = [
+    { label: "Total Courses", value: stats.total },
+    { label: "Active", value: stats.active },
+    { label: "Inactive", value: stats.inactive },
+    { label: "Total Enrollments", value: stats.totalEnrollments.toLocaleString() },
   ]
 
-  const courseStats = [
-    { label: "Total Courses", value: "24", change: "+3" },
-    { label: "Published", value: "21", change: "+2" },
-    { label: "Draft", value: "3", change: "+1" },
-    { label: "Total Enrollments", value: "5,247", change: "+234" },
-  ]
+  const CourseItem = ({ course }: { course: CourseRow }) => (
+    <div className="flex items-center gap-4 p-4 border rounded-lg">
+      <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
+        <BookOpen className="w-6 h-6 text-primary" />
+      </div>
+
+      <div className="flex-1 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <h4 className="font-semibold text-lg">{course.title}</h4>
+          <Badge variant={course.is_active ? "default" : "secondary"}>
+            {course.is_active ? "Active" : "Inactive"}
+          </Badge>
+          <Badge variant="outline" className="capitalize">{course.level}</Badge>
+        </div>
+
+        <div className="flex items-center gap-4 text-sm text-muted-foreground flex-wrap">
+          <span>by {course.instructor}</span>
+          <span>{course.category}</span>
+          <div className="flex items-center gap-1"><Clock className="w-3 h-3" />{course.duration} hours</div>
+          <span>{course.moduleCount} modules</span>
+        </div>
+
+        <div className="flex items-center gap-6 text-sm flex-wrap">
+          <div className="flex items-center gap-1">
+            <Users className="w-4 h-4 text-primary" />
+            <span>{(course.enrollment_count ?? 0).toLocaleString()} enrolled</span>
+          </div>
+          <span>{course.completedCount.toLocaleString()} completed</span>
+          {course.rating !== null && course.rating > 0 && (
+            <div className="flex items-center gap-1">
+              <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
+              <span>{course.rating}</span>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="sm"><MoreHorizontal className="w-4 h-4" /></Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem asChild>
+            <Link href={`/courses/${course.id}`}><Eye className="w-4 h-4 mr-2" />View Course</Link>
+          </DropdownMenuItem>
+          <DropdownMenuItem onClick={() => { setEditing(course); setEditOpen(true) }}>
+            <Edit className="w-4 h-4 mr-2" />Edit Course
+          </DropdownMenuItem>
+          {course.is_active ? (
+            <DropdownMenuItem className="text-destructive" onClick={() => setPendingToggle(course)}>
+              <PowerOff className="w-4 h-4 mr-2" />Deactivate
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem onClick={() => toggleActive(course, true)}>
+              <Power className="w-4 h-4 mr-2" />Reactivate
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  )
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground font-serif">Course Management</h1>
           <p className="text-muted-foreground">Create and manage learning content</p>
         </div>
-        <CreateCourseForm />
+        <CreateCourseForm onSaved={load} />
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {courseStats.map((stat) => (
+        {statCards.map((stat) => (
           <Card key={stat.label}>
             <CardContent className="p-4">
               <div className="text-center">
-                <div className="text-2xl font-bold">{stat.value}</div>
+                <div className="text-2xl font-bold">{loading ? "—" : stat.value}</div>
                 <div className="text-sm text-muted-foreground">{stat.label}</div>
-                <Badge variant="outline" className="text-xs mt-1">
-                  {stat.change} this month
-                </Badge>
               </div>
             </CardContent>
           </Card>
         ))}
       </div>
 
+      {error && <p className="text-sm text-destructive">{error}</p>}
+
       <Tabs defaultValue="all" className="w-full">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center justify-between mb-4 gap-4 flex-wrap">
           <TabsList>
-            <TabsTrigger value="all">All Courses (24)</TabsTrigger>
-            <TabsTrigger value="published">Published (21)</TabsTrigger>
-            <TabsTrigger value="draft">Draft (3)</TabsTrigger>
-            <TabsTrigger value="archived">Archived (0)</TabsTrigger>
+            <TabsTrigger value="all">All Courses ({filtered.length})</TabsTrigger>
+            <TabsTrigger value="active">Active ({activeCourses.length})</TabsTrigger>
+            <TabsTrigger value="inactive">Inactive ({inactiveCourses.length})</TabsTrigger>
           </TabsList>
 
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input placeholder="Search courses..." className="pl-10 w-64" />
+            <Input placeholder="Search courses..." className="pl-10 w-64" value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         </div>
 
-        <TabsContent value="all">
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5" />
-                All Courses
-              </CardTitle>
-              <CardDescription>Manage all platform courses and content</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {courses.map((course) => (
-                  <div key={course.id} className="flex items-center gap-4 p-4 border rounded-lg">
-                    <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
-                      <BookOpen className="w-6 h-6 text-primary" />
-                    </div>
-
-                    <div className="flex-1 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <h4 className="font-semibold text-lg">{course.title}</h4>
-                        <Badge variant={course.status === "Published" ? "default" : "secondary"}>{course.status}</Badge>
-                        <Badge variant="outline">{course.level}</Badge>
-                      </div>
-
-                      <div className="flex items-center gap-4 text-sm text-muted-foreground">
-                        <span>by {course.instructor}</span>
-                        <span>{course.category}</span>
-                        <div className="flex items-center gap-1">
-                          <Clock className="w-3 h-3" />
-                          {course.duration}
-                        </div>
-                        <span>{course.modules} modules</span>
-                      </div>
-
-                      <div className="flex items-center gap-6 text-sm">
-                        <div className="flex items-center gap-1">
-                          <Users className="w-4 h-4 text-primary" />
-                          <span>{course.enrollments.toLocaleString()} enrolled</span>
-                        </div>
-                        <span>{course.completions.toLocaleString()} completed</span>
-                        {course.rating > 0 && (
-                          <div className="flex items-center gap-1">
-                            <Star className="w-4 h-4 fill-yellow-400 text-yellow-400" />
-                            <span>{course.rating}</span>
-                          </div>
-                        )}
-                        <span>Updated: {course.lastUpdated}</span>
-                      </div>
-                    </div>
-
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm">
-                          <MoreHorizontal className="w-4 h-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                          <Eye className="w-4 h-4 mr-2" />
-                          View Course
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Edit className="w-4 h-4 mr-2" />
-                          Edit Course
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Users className="w-4 h-4 mr-2" />
-                          View Enrollments
-                        </DropdownMenuItem>
-                        <DropdownMenuItem>
-                          <Star className="w-4 h-4 mr-2" />
-                          View Reviews
-                        </DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive">
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete Course
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+        {loading ? (
+          <div className="flex justify-center p-10"><Loader2 className="w-8 h-8 animate-spin" /></div>
+        ) : (
+          <>
+            <TabsContent value="all">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2"><BookOpen className="w-5 h-5" />All Courses</CardTitle>
+                  <CardDescription>Every course, active or not (admins see all).</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {filtered.length === 0 && <p className="text-sm text-muted-foreground">No courses found.</p>}
+                    {filtered.map((c) => <CourseItem key={c.id} course={c} />)}
                   </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+                </CardContent>
+              </Card>
+            </TabsContent>
 
-        <TabsContent value="draft">
-          <Card>
-            <CardHeader>
-              <CardTitle>Draft Courses</CardTitle>
-              <CardDescription>Courses in development or awaiting publication</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {courses
-                  .filter((course) => course.status === "Draft")
-                  .map((course) => (
-                    <div key={course.id} className="flex items-center gap-4 p-4 border rounded-lg">
-                      <div className="w-16 h-16 bg-muted rounded-lg flex items-center justify-center">
-                        <BookOpen className="w-6 h-6 text-muted-foreground" />
-                      </div>
+            <TabsContent value="active">
+              <Card>
+                <CardHeader><CardTitle>Active Courses</CardTitle><CardDescription>Visible in the public catalog and open for enrollment.</CardDescription></CardHeader>
+                <CardContent><div className="space-y-4">
+                  {activeCourses.length === 0 && <p className="text-sm text-muted-foreground">No active courses.</p>}
+                  {activeCourses.map((c) => <CourseItem key={c.id} course={c} />)}
+                </div></CardContent>
+              </Card>
+            </TabsContent>
 
-                      <div className="flex-1">
-                        <h4 className="font-semibold">{course.title}</h4>
-                        <p className="text-sm text-muted-foreground">by {course.instructor}</p>
-                        <p className="text-xs text-muted-foreground">Created: {course.createdDate}</p>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <Button size="sm" variant="outline" className="bg-transparent">
-                          <Edit className="w-4 h-4 mr-2" />
-                          Edit
-                        </Button>
-                        <Button size="sm">Publish</Button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            <TabsContent value="inactive">
+              <Card>
+                <CardHeader><CardTitle>Inactive Courses</CardTitle><CardDescription>Hidden from the catalog and closed to new enrollment. Existing enrollments and certificates are untouched.</CardDescription></CardHeader>
+                <CardContent><div className="space-y-4">
+                  {inactiveCourses.length === 0 && <p className="text-sm text-muted-foreground">No inactive courses.</p>}
+                  {inactiveCourses.map((c) => <CourseItem key={c.id} course={c} />)}
+                </div></CardContent>
+              </Card>
+            </TabsContent>
+          </>
+        )}
       </Tabs>
+
+      {/* Edit dialog (shared with Create) */}
+      <CourseFormDialog course={editing} open={editOpen} onOpenChange={setEditOpen} onSaved={load} />
+
+      {/* Deactivate confirmation */}
+      <AlertDialog open={!!pendingToggle} onOpenChange={(o) => { if (!o) setPendingToggle(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Deactivate this course?</AlertDialogTitle>
+            <AlertDialogDescription>
+              &ldquo;{pendingToggle?.title}&rdquo; will be <strong>hidden from the public catalog and closed to new
+              enrollment immediately</strong>. Nothing is deleted — existing enrollments, progress and certificates
+              are kept, and you can reactivate it at any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={working}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={working}
+              onClick={(e) => { e.preventDefault(); if (pendingToggle) toggleActive(pendingToggle, false) }}
+            >
+              {working ? "Deactivating..." : "Deactivate"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

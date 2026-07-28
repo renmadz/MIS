@@ -16,7 +16,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog"
 import {
   Select,
@@ -30,16 +29,51 @@ import { Plus, X, Check, Info } from "lucide-react"
 type InstructorOption = { id: string; name: string; email: string }
 type Suggestion = { id: string; title: string; score: number }
 
+// Shape needed to prefill the form in edit mode.
+export type EditableCourse = {
+  id: string
+  title: string
+  description: string
+  category: string
+  level: "beginner" | "intermediate" | "advanced"
+  duration: number
+  target_audience: string[] | null
+  prerequisites: string[] | null
+  thumbnail: string
+  instructor: string
+  instructor_id: string | null
+  is_active: boolean
+}
+
 const norm = (s: string) => s.trim().toLowerCase()
 
+function revalidateCatalog() {
+  fetch("/api/revalidate", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ path: "/courses" }),
+  }).catch(() => {})
+}
+
 /**
- * Real "Create Course" — inserts a courses row via the admin RLS path
- * (courses_admin_write). Deliberately plain: the rest of course-management.tsx
- * (edit/delete/stats/list) is still mock and out of scope here.
+ * Shared create/edit course dialog (controlled). `course` undefined => create
+ * (INSERT); present => edit (UPDATE by id). Both go through courses_admin_write
+ * RLS. The prerequisite tag-input + suggest_course_titles() logic is shared, not
+ * rebuilt, so Edit behaves identically to Create.
  */
-export function CreateCourseForm() {
+export function CourseFormDialog({
+  course,
+  open,
+  onOpenChange,
+  onSaved,
+}: {
+  course?: EditableCourse | null
+  open: boolean
+  onOpenChange: (o: boolean) => void
+  onSaved?: () => void
+}) {
   const router = useRouter()
-  const [open, setOpen] = useState(false)
+  const isEdit = !!course
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -64,11 +98,30 @@ export function CreateCourseForm() {
   const [activeTitles, setActiveTitles] = useState<string[]>([])
   const debounce = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Instructor dropdown + the active-course title list used for exact matching.
-  // Exact matching is done client-side with the same lower(trim(...)) rule
-  // get_unmet_prerequisites() uses, so the checkmark means what it says.
+  // Load instructor options + active titles, and (re)initialise fields whenever
+  // the dialog opens — from `course` in edit mode, or defaults in create mode.
   useEffect(() => {
     if (!open) return
+
+    if (course) {
+      setTitle(course.title ?? "")
+      setDescription(course.description ?? "")
+      setCategory(course.category ?? "")
+      setLevel(course.level ?? "beginner")
+      setDuration(String(course.duration ?? ""))
+      setThumbnail(course.thumbnail ?? "/placeholder.svg")
+      setIsActive(course.is_active)
+      setInstructorId(course.instructor_id ?? "")
+      setInstructorName(course.instructor ?? "")
+      setAudience(course.target_audience ?? [])
+      setPrereqs(course.prerequisites ?? [])
+    } else {
+      setTitle(""); setDescription(""); setCategory(""); setLevel("beginner")
+      setDuration(""); setThumbnail("/placeholder.svg"); setIsActive(true)
+      setInstructorId(""); setInstructorName(""); setAudience([]); setPrereqs([])
+    }
+    setAudienceInput(""); setPrereqInput(""); setSuggestions([]); setError(null)
+
     const load = async () => {
       const { data: instr } = await supabaseBrowser
         .from("users")
@@ -85,12 +138,11 @@ export function CreateCourseForm() {
       setActiveTitles((courses ?? []).map((c: { title: string }) => c.title))
     }
     load()
-  }, [open])
+  }, [open, course])
 
   const prereqExactMatch = prereqInput.trim().length > 0 &&
     activeTitles.some((t) => norm(t) === norm(prereqInput))
 
-  // Fuzzy "did you mean" — suggestion only, never enforcement.
   useEffect(() => {
     if (debounce.current) clearTimeout(debounce.current)
     const value = prereqInput.trim()
@@ -99,9 +151,7 @@ export function CreateCourseForm() {
       return
     }
     debounce.current = setTimeout(async () => {
-      const { data } = await supabaseBrowser.rpc("suggest_course_titles", {
-        p_input: value,
-      })
+      const { data } = await supabaseBrowser.rpc("suggest_course_titles", { p_input: value })
       setSuggestions((data ?? []).slice(0, 5))
     }, 300)
     return () => {
@@ -127,20 +177,9 @@ export function CreateCourseForm() {
     if (found) setInstructorName(found.name)
   }
 
-  const reset = () => {
-    setTitle(""); setDescription(""); setCategory(""); setLevel("beginner")
-    setDuration(""); setThumbnail("/placeholder.svg"); setIsActive(true)
-    setInstructorId(""); setInstructorName("")
-    setAudienceInput(""); setAudience([])
-    setPrereqInput(""); setPrereqs([]); setSuggestions([])
-    setError(null)
-  }
-
   const handleSubmit = async () => {
     setError(null)
 
-    // Only the columns the database declares NOT NULL are enforced here.
-    // Prerequisites are deliberately unvalidated (see the note in the form).
     if (!title.trim()) return setError("Title is required.")
     if (!description.trim()) return setError("Description is required.")
     if (!category.trim()) return setError("Category is required.")
@@ -151,57 +190,53 @@ export function CreateCourseForm() {
       return setError("Duration must be a whole number greater than 0.")
     }
 
+    const payload = {
+      title: title.trim(),
+      description: description.trim(),
+      category: category.trim(),
+      level,
+      duration: durationNum,
+      target_audience: audience,
+      prerequisites: prereqs.length > 0 ? prereqs : null,
+      thumbnail: thumbnail.trim(),
+      instructor: instructorName.trim(),
+      instructor_id: instructorId || null,
+      is_active: isActive,
+    }
+
     setSaving(true)
     try {
-      const { error: insertError } = await supabaseBrowser.from("courses").insert({
-        title: title.trim(),
-        description: description.trim(),
-        category: category.trim(),
-        level,
-        duration: durationNum,
-        target_audience: audience,
-        prerequisites: prereqs.length > 0 ? prereqs : null,
-        thumbnail: thumbnail.trim(),
-        instructor: instructorName.trim(),
-        instructor_id: instructorId || null,
-        is_active: isActive,
-      })
-      if (insertError) throw new Error(insertError.message)
+      if (isEdit && course) {
+        const { error: updateError } = await supabaseBrowser
+          .from("courses")
+          .update(payload)
+          .eq("id", course.id)
+        if (updateError) throw new Error(updateError.message)
+      } else {
+        const { error: insertError } = await supabaseBrowser.from("courses").insert(payload)
+        if (insertError) throw new Error(insertError.message)
+      }
 
-      // Drop the cached public catalog so the new course appears immediately
-      // instead of waiting out the ISR window. Best-effort — a failure here just
-      // means it appears on the next revalidation.
-      fetch("/api/revalidate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: "/courses" }),
-      }).catch(() => {})
-
-      reset()
-      setOpen(false)
+      revalidateCatalog()
+      onSaved?.()
+      onOpenChange(false)
       router.refresh()
     } catch (err: any) {
-      setError(err.message || "Failed to create course.")
+      setError(err.message || "Failed to save course.")
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset() }}>
-      <DialogTrigger asChild>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" />
-          Create Course
-        </Button>
-      </DialogTrigger>
-
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>Create Course</DialogTitle>
+          <DialogTitle>{isEdit ? "Edit Course" : "Create Course"}</DialogTitle>
           <DialogDescription>
-            Creates a real course record. Modules and content are added separately by
-            the assigned instructor.
+            {isEdit
+              ? "Update this course's details. Modules and content are managed separately by the assigned instructor."
+              : "Creates a real course record. Modules and content are added separately by the assigned instructor."}
           </DialogDescription>
         </DialogHeader>
 
@@ -213,30 +248,19 @@ export function CreateCourseForm() {
 
           <div className="space-y-2">
             <Label htmlFor="course-description">Description</Label>
-            <Textarea
-              id="course-description"
-              rows={3}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+            <Textarea id="course-description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-2">
               <Label htmlFor="course-category">Category</Label>
-              <Input
-                id="course-category"
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-              />
+              <Input id="course-category" value={category} onChange={(e) => setCategory(e.target.value)} />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="course-level">Level</Label>
               <Select value={level} onValueChange={(v) => setLevel(v as typeof level)}>
-                <SelectTrigger id="course-level">
-                  <SelectValue />
-                </SelectTrigger>
+                <SelectTrigger id="course-level"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="beginner">Beginner</SelectItem>
                   <SelectItem value="intermediate">Intermediate</SelectItem>
@@ -247,13 +271,7 @@ export function CreateCourseForm() {
 
             <div className="space-y-2">
               <Label htmlFor="course-duration">Duration (hours)</Label>
-              <Input
-                id="course-duration"
-                type="number"
-                min={1}
-                value={duration}
-                onChange={(e) => setDuration(e.target.value)}
-              />
+              <Input id="course-duration" type="number" min={1} value={duration} onChange={(e) => setDuration(e.target.value)} />
             </div>
           </div>
 
@@ -266,43 +284,26 @@ export function CreateCourseForm() {
                 </SelectTrigger>
                 <SelectContent>
                   {instructors.length === 0 && (
-                    <div className="px-2 py-1.5 text-sm text-muted-foreground">
-                      No active instructor accounts
-                    </div>
+                    <div className="px-2 py-1.5 text-sm text-muted-foreground">No active instructor accounts</div>
                   )}
                   {instructors.map((i) => (
-                    <SelectItem key={i.id} value={i.id}>
-                      {i.name} — {i.email}
-                    </SelectItem>
+                    <SelectItem key={i.id} value={i.id}>{i.name} — {i.email}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Grants that account upload rights for this course&apos;s modules.
-              </p>
+              <p className="text-xs text-muted-foreground">Grants that account upload rights for this course&apos;s modules.</p>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="course-instructor-name">Instructor display name</Label>
-              <Input
-                id="course-instructor-name"
-                value={instructorName}
-                onChange={(e) => setInstructorName(e.target.value)}
-              />
-              <p className="text-xs text-muted-foreground">
-                Shown on the course card. Auto-filled from the selection above; editable
-                for instructors without a platform account.
-              </p>
+              <Input id="course-instructor-name" value={instructorName} onChange={(e) => setInstructorName(e.target.value)} />
+              <p className="text-xs text-muted-foreground">Shown on the course card. Auto-filled from the selection above; editable for instructors without a platform account.</p>
             </div>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="course-thumbnail">Thumbnail path</Label>
-            <Input
-              id="course-thumbnail"
-              value={thumbnail}
-              onChange={(e) => setThumbnail(e.target.value)}
-            />
+            <Input id="course-thumbnail" value={thumbnail} onChange={(e) => setThumbnail(e.target.value)} />
           </div>
 
           {/* target_audience — text[] */}
@@ -325,11 +326,7 @@ export function CreateCourseForm() {
                 {audience.map((a) => (
                   <Badge key={a} variant="secondary" className="gap-1">
                     {a}
-                    <button
-                      type="button"
-                      onClick={() => setAudience(audience.filter((x) => x !== a))}
-                      aria-label={`Remove ${a}`}
-                    >
+                    <button type="button" onClick={() => setAudience(audience.filter((x) => x !== a))} aria-label={`Remove ${a}`}>
                       <X className="w-3 h-3" />
                     </button>
                   </Badge>
@@ -350,34 +347,23 @@ export function CreateCourseForm() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault()
-                    addTag(prereqInput, prereqs, setPrereqs, () => {
-                      setPrereqInput("")
-                      setSuggestions([])
-                    })
+                    addTag(prereqInput, prereqs, setPrereqs, () => { setPrereqInput(""); setSuggestions([]) })
                   }
                 }}
               />
-              {prereqExactMatch && (
-                <Check className="absolute right-3 top-2.5 w-4 h-4 text-green-600" />
-              )}
+              {prereqExactMatch && <Check className="absolute right-3 top-2.5 w-4 h-4 text-green-600" />}
             </div>
 
             {prereqExactMatch && (
-              <p className="text-xs text-green-600">
-                Matches an existing course — this prerequisite will be enforced.
-              </p>
+              <p className="text-xs text-green-600">Matches an existing course — this prerequisite will be enforced.</p>
             )}
 
             {!prereqExactMatch && suggestions.length > 0 && (
               <div className="text-xs text-muted-foreground space-x-1">
                 <span>Did you mean:</span>
                 {suggestions.map((s) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    className="underline underline-offset-2 hover:text-foreground"
-                    onClick={() => { setPrereqInput(s.title); setSuggestions([]) }}
-                  >
+                  <button key={s.id} type="button" className="underline underline-offset-2 hover:text-foreground"
+                    onClick={() => { setPrereqInput(s.title); setSuggestions([]) }}>
                     {s.title}
                   </button>
                 ))}
@@ -392,11 +378,7 @@ export function CreateCourseForm() {
                     <Badge key={p} variant={matched ? "default" : "outline"} className="gap-1">
                       {matched && <Check className="w-3 h-3" />}
                       {p}
-                      <button
-                        type="button"
-                        onClick={() => setPrereqs(prereqs.filter((x) => x !== p))}
-                        aria-label={`Remove ${p}`}
-                      >
+                      <button type="button" onClick={() => setPrereqs(prereqs.filter((x) => x !== p))} aria-label={`Remove ${p}`}>
                         <X className="w-3 h-3" />
                       </button>
                     </Badge>
@@ -408,11 +390,10 @@ export function CreateCourseForm() {
             <p className="text-xs text-muted-foreground flex gap-2">
               <Info className="w-4 h-4 shrink-0 mt-0.5" />
               <span>
-                A prerequisite only locks a course if the text matches an existing
-                course&apos;s title exactly (capitalisation and extra spaces are ignored).
-                Text that matches nothing is saved but has no effect, which is fine — if a
-                course with that exact title is uploaded later, the lock starts applying
-                on its own, including to people already enrolled.
+                A prerequisite only locks a course if the text matches an existing course&apos;s title
+                exactly (capitalisation and extra spaces are ignored). Text that matches nothing is
+                saved but has no effect, which is fine — if a course with that exact title is uploaded
+                later, the lock starts applying on its own, including to people already enrolled.
               </span>
             </p>
           </div>
@@ -426,14 +407,26 @@ export function CreateCourseForm() {
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={() => setOpen(false)} disabled={saving}>
-            Cancel
-          </Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Cancel</Button>
           <Button onClick={handleSubmit} disabled={saving}>
-            {saving ? "Creating..." : "Create Course"}
+            {saving ? "Saving..." : isEdit ? "Save Changes" : "Create Course"}
           </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+/** Thin wrapper: the "Create Course" button that opens a fresh CourseFormDialog. */
+export function CreateCourseForm({ onSaved }: { onSaved?: () => void }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <Button className="gap-2" onClick={() => setOpen(true)}>
+        <Plus className="w-4 h-4" />
+        Create Course
+      </Button>
+      <CourseFormDialog open={open} onOpenChange={setOpen} onSaved={onSaved} />
+    </>
   )
 }
