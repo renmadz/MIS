@@ -21,7 +21,7 @@ import { useUser } from "@/components/providers/user-provider"
 export function Header() {
   const router = useRouter()
   const pathname = usePathname()
-  const { profile: user, loading: isLoading } = useUser()
+  const { profile: user, loading: isLoading, error: userError, retry } = useUser()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
 
   // Avatar signed URL follows the shared profile's avatar path. The profile
@@ -72,6 +72,10 @@ export function Header() {
           {isLoading ? (
             <div className="flex items-center gap-3">
               <Button variant="outline" disabled>Loading...</Button>
+            </div>
+          ) : userError ? (
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" onClick={retry}>Retry</Button>
             </div>
           ) : user ? (
             <div className="flex items-center gap-4 cursor-pointer">
