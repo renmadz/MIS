@@ -45,8 +45,19 @@ export async function GET(request: Request) {
   if (level) query = query.eq("level", level);
   if (category) query = query.eq("category", category);
   if (target_audience) {
-    const audienceArray = JSON.parse(target_audience) as string[];
-    query = query.contains("target_audience", audienceArray);
+    // target_audience arrives as a JSON-encoded string array. Guard the parse so
+    // malformed input is a clean 400, not an unhandled 500. Also require an
+    // actual array of strings.
+    let audienceArray: unknown;
+    try {
+      audienceArray = JSON.parse(target_audience);
+    } catch {
+      return NextResponse.json({ error: "Invalid target_audience parameter" }, { status: 400 });
+    }
+    if (!Array.isArray(audienceArray) || !audienceArray.every((a) => typeof a === "string")) {
+      return NextResponse.json({ error: "Invalid target_audience parameter" }, { status: 400 });
+    }
+    query = query.contains("target_audience", audienceArray as string[]);
   }
   if (durationMin !== undefined) query = query.gte("duration", durationMin * 60);
   if (durationMax !== undefined) query = query.lte("duration", durationMax * 60);
