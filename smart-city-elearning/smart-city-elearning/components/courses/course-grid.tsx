@@ -21,7 +21,12 @@ export function CourseGrid({ filters, search }: CourseGridProps) {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchCourses = async () => {
+    // Debounce so typing fires one request after a pause, not one per keystroke.
+    // The AbortController cancels any in-flight request when a newer change
+    // supersedes it, so a stale response can never overwrite a newer one.
+    const controller = new AbortController();
+
+    const timer = setTimeout(async () => {
       setIsLoading(true);
       setError(null);
       try {
@@ -34,17 +39,22 @@ export function CourseGrid({ filters, search }: CourseGridProps) {
         if (filters.duration?.max) url.searchParams.append("durationMax", filters.duration.max?.toString() || "");
         if (search) url.searchParams.append("search", search);
 
-        const response = await fetch(url.toString());
+        const response = await fetch(url.toString(), { signal: controller.signal });
         if (!response.ok) throw new Error(`HTTP error ${response.status}`);
         const data = await response.json();
         setCourses(data.courses || []);
       } catch (err: any) {
+        if (err?.name === "AbortError") return; // superseded by a newer request
         setError("Failed to load courses. Please try again.");
       } finally {
-        setIsLoading(false);
+        if (!controller.signal.aborted) setIsLoading(false);
       }
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);   // cancel a pending (not-yet-fired) request
+      controller.abort();    // cancel an in-flight one
     };
-    fetchCourses();
   }, [filters, search]);
 
   return (
