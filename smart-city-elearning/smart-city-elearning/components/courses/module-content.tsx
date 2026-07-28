@@ -282,8 +282,13 @@ export function ModuleContent({ courseId, moduleId }: { courseId: string; module
             })
 
             if (!issueResponse.ok) {
-              const issueError = await issueResponse.json()
-              throw new Error(issueError.error || "Failed to issue certificate")
+              // The lesson itself was already marked complete; only certificate
+              // issuance failed. Surface the API's specific reason (e.g. "no lesson
+              // content yet") instead of the generic mark-complete alert below.
+              const issueError = await issueResponse.json().catch(() => ({}))
+              alert(issueError.error || "Failed to issue certificate")
+              router.push(`/courses/${courseId}`)
+              return
             }
 
             setShowConfetti(true)

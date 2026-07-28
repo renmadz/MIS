@@ -75,6 +75,16 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: totalLessonsError.message }, { status: 500 })
     }
 
+    // A lesson-less course cannot be "completed" — block issuance with an honest,
+    // distinct message rather than the misleading "Not all lessons completed"
+    // that the falsy `!totalLessons` check below would otherwise produce.
+    if (totalLessons === 0) {
+      return NextResponse.json(
+        { error: "This course has no lesson content yet; a certificate cannot be issued until content exists." },
+        { status: 400 }
+      )
+    }
+
     const { count: completedLessons, error: completedLessonsError } = await supabase
       .from("progress")
       .select("id", { count: "exact", head: true })
