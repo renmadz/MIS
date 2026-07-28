@@ -25,6 +25,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Plus, X, Check, Info } from "lucide-react"
+import { recordAdminAction } from "@/lib/admin/log-client"
 
 type InstructorOption = { id: string; name: string; email: string }
 type Suggestion = { id: string; title: string; score: number }
@@ -212,9 +213,11 @@ export function CourseFormDialog({
           .update(payload)
           .eq("id", course.id)
         if (updateError) throw new Error(updateError.message)
+        recordAdminAction("course_updated", course.id, { message: `Course updated: ${payload.title}` })
       } else {
         const { error: insertError } = await supabaseBrowser.from("courses").insert(payload)
         if (insertError) throw new Error(insertError.message)
+        recordAdminAction("course_created", null, { data: { title: payload.title } })
       }
 
       revalidateCatalog()

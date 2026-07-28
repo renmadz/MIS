@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import Link from "next/link"
 import { CreateCourseForm, CourseFormDialog, type EditableCourse } from "@/components/admin/create-course-form"
+import { recordAdminAction } from "@/lib/admin/log-client"
 
 type CourseRow = EditableCourse & {
   rating: number | null
@@ -110,6 +111,9 @@ export function CourseManagement() {
         .update({ is_active: next })
         .eq("id", course.id)
       if (uErr) throw new Error(uErr.message)
+      recordAdminAction(next ? "course_reactivated" : "course_deactivated", course.id, {
+        message: `Course ${next ? "reactivated" : "deactivated"}: ${course.title}`,
+      })
       revalidateCatalog()
       setCourses((prev) => prev.map((c) => (c.id === course.id ? { ...c, is_active: next } : c)))
     } catch (err: any) {

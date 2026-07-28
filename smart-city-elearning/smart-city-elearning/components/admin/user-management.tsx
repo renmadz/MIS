@@ -14,6 +14,7 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { recordAdminAction } from "@/lib/admin/log-client"
 
 type Status = "active" | "pending" | "inactive"
 type UserRow = {
@@ -86,6 +87,13 @@ export function UserManagement() {
     try {
       const { error: uErr } = await supabaseBrowser.from("users").update({ status: next }).eq("id", user.id)
       if (uErr) throw new Error(uErr.message)
+      // Action name depends on the transition (approve vs reactivate both -> active).
+      const action =
+        next === "inactive" ? "user_suspended"
+        : user.status === "pending" ? "user_approved"
+        : "user_reactivated"
+      const verb = action === "user_suspended" ? "suspended" : action === "user_approved" ? "approved" : "reactivated"
+      recordAdminAction(action, user.id, { message: `User ${verb}: ${user.name}` })
       setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, status: next } : u)))
     } catch (err: any) {
       setError(err.message || "Failed to update user status.")

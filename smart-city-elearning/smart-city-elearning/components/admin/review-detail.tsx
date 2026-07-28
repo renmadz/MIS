@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { ArrowLeft, Check, X, FileText } from "lucide-react"
+import { recordAdminAction } from "@/lib/admin/log-client"
 
 const PdfViewer = dynamic(
   () => import("@/components/courses/pdf-viewer").then((m) => m.PdfViewer),
@@ -115,6 +116,10 @@ export function ReviewDetail({ moduleId }: { moduleId: string }) {
         })
         .eq("id", moduleId)
       if (updateError) throw new Error(updateError.message)
+
+      recordAdminAction(decision === "published" ? "module_approved" : "module_rejected", moduleId, {
+        message: `Module ${decision === "published" ? "approved" : "rejected"}: ${title}`,
+      })
 
       // Publishing changes what the public course page shows — drop its cache so
       // the newly published module appears immediately. Best-effort.
