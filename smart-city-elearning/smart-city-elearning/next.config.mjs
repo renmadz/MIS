@@ -1,4 +1,13 @@
 /** @type {import('next').NextConfig} */
+
+// Course thumbnails are local /public assets, so next/image optimization works
+// without an allowlist. This entry is defensive: Supabase-signed images (e.g.
+// avatars, if ever moved from the Radix <img> to next/image) are served from the
+// storage host, and next/image refuses remote hosts unless explicitly allowed.
+const supabaseHostname = process.env.NEXT_PUBLIC_SUPABASE_URL
+  ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
+  : undefined;
+
 const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
@@ -7,7 +16,9 @@ const nextConfig = {
   // Bundling it into vendor-chunks/ breaks that path, so load it from node_modules.
   serverExternalPackages: ['pdfkit'],
   images: {
-    unoptimized: true,
+    remotePatterns: supabaseHostname
+      ? [{ protocol: 'https', hostname: supabaseHostname, pathname: '/storage/v1/object/**' }]
+      : [],
   },
   webpack(config) {
     config.experiments = { ...config.experiments, topLevelAwait: true };

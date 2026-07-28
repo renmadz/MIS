@@ -7,6 +7,8 @@ import { Progress } from "@/components/ui/progress"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { BookOpen, Clock, Play, CheckCircle, Calendar, Star, Eye } from "lucide-react"
 import Link from "next/link"
+import Image from "next/image"
+import { useState } from "react"
 import type { User } from "@/lib/types/database"
 
 // Interface for the enriched enrolled course data
@@ -128,16 +130,19 @@ export function EnrolledCourses({ enrolledCourses = [], user }: EnrolledCoursesP
 }
 
 function CourseCard({ course }: { course: EnrolledCourse }) {
+  const [imgSrc, setImgSrc] = useState(course.image || "/placeholder.svg")
   return (
     <Card>
       <CardContent className="p-6">
         <div className="flex flex-col md:flex-row gap-6">
-          <div className="w-full md:w-32 h-32 md:h-24 rounded-lg flex items-center justify-center flex-shrink-0 overflow-hidden bg-muted">
-            <img
-              src={course.image}
+          <div className="relative w-full md:w-32 h-32 md:h-24 rounded-lg flex-shrink-0 overflow-hidden bg-muted">
+            <Image
+              src={imgSrc}
               alt={course.title}
-              className="w-full h-full object-cover"
-              onError={(e) => (e.currentTarget.src = "/placeholder.jpg")}
+              fill
+              sizes="(max-width: 768px) 100vw, 128px"
+              className="object-cover"
+              onError={() => setImgSrc("/placeholder.jpg")}
             />
           </div>
 

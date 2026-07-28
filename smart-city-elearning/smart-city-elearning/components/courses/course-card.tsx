@@ -20,7 +20,7 @@ export function CourseCard({ course }: CourseCardProps) {
           width={300}
           height={200}
           className="w-full h-48 object-cover rounded-t-lg"
-          priority
+          sizes="(max-width: 768px) 100vw, (max-width: 1024px) 50vw, 33vw"
         />
         <Badge className="absolute top-3 left-3" variant="default">
           {course.level}
