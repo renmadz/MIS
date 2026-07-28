@@ -33,11 +33,14 @@ export default function CoursePage() {
       setError(null); // Reset error on new fetch
       try {
         // Fetch course with nested modules and lessons
+        // Explicit columns only — the detail components render these; the old
+        // `courses.*, modules(*)` also pulled skills/timestamps/instructor_id and
+        // every module column the page never reads.
         const { data: courseData, error: courseError } = await supabaseBrowser
           .from('courses')
-          .select('*, modules(*, lessons(id, module_id, title, type, order, duration, start_page))')
+          .select('id, title, description, category, level, duration, thumbnail, rating, enrollment_count, target_audience, is_active, instructor, prerequisites, modules(id, title, description, order, estimated_duration, is_required, lessons(id, module_id, title, type, order, duration, start_page))')
           .eq('id', id)
-          .single()
+          .single<Course>()
 
         if (courseError) throw courseError
         // Sort modules and lessons

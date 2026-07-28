@@ -21,19 +21,24 @@ export async function GET(request: Request) {
     }
   );
 
+  // Only the columns the course card renders, plus modules(id) purely for the
+  // "N modules" count (via .length). Previously this pulled every module's
+  // title+description+more — ~3x the payload for data the catalog never shows.
   let query = supabase
     .from("courses")
     .select(`
-      *,
-      modules!course_id (
-        id,
-        course_id,
-        title,
-        description,
-        order,
-        estimated_duration,
-        is_required
-      )
+      id,
+      title,
+      description,
+      level,
+      category,
+      duration,
+      thumbnail,
+      rating,
+      enrollment_count,
+      target_audience,
+      instructor,
+      modules!course_id ( id )
     `)
     .eq("is_active", true);
 
