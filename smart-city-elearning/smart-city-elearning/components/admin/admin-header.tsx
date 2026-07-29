@@ -1,7 +1,10 @@
+"use client"
+
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { BookOpen, Bell, Settings, LogOut, Shield } from "lucide-react"
+import { BookOpen, LogOut, Shield } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -11,13 +14,34 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
+import { supabaseBrowser } from "@/lib/supabase/browser-client"
+import { useUser } from "@/components/providers/user-provider"
 
 export function AdminHeader() {
+  const router = useRouter()
+  const { profile } = useUser()
+  const name = profile?.name || "Admin"
+  const email = profile?.email ?? ""
+
+  const handleLogout = async () => {
+    await supabaseBrowser.auth.signOut()
+    router.push("/login")
+  }
+
+  const initials = name
+    .split(" ")
+    .map((part) => part[0])
+    .filter(Boolean)
+    .slice(0, 2)
+    .join("")
+    .toUpperCase()
+
   return (
     <header className="border-b bg-card/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="container mx-auto px-4 py-4">
         <div className="flex items-center justify-between">
-          <Link href="/admin" className="flex items-center gap-3">
+          {/* Brand mark links back to the dashboard, like the rest of the app. */}
+          <Link href="/dashboard" className="flex items-center gap-3">
             <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center">
               <BookOpen className="w-6 h-6 text-primary-foreground" />
             </div>
@@ -28,25 +52,20 @@ export function AdminHeader() {
           </Link>
 
           <div className="flex items-center gap-4">
-            <Button variant="ghost" size="sm" className="relative">
-              <Bell className="w-4 h-4" />
-              <span className="absolute -top-1 -right-1 w-2 h-2 bg-destructive rounded-full"></span>
-            </Button>
-
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">
                   <Avatar className="h-10 w-10">
-                    <AvatarImage src="/placeholder.svg" alt="Admin" />
-                    <AvatarFallback>AD</AvatarFallback>
+                    <AvatarImage src="/placeholder.svg" alt={name} />
+                    <AvatarFallback>{initials || "AD"}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent className="w-56" align="end" forceMount>
                 <DropdownMenuLabel className="font-normal">
                   <div className="flex flex-col space-y-1">
-                    <p className="text-sm font-medium leading-none">Admin User</p>
-                    <p className="text-xs leading-none text-muted-foreground">admin@smartlearn-region2.gov.ph</p>
+                    <p className="text-sm font-medium leading-none">{name}</p>
+                    <p className="text-xs leading-none text-muted-foreground">{email}</p>
                     <Badge variant="destructive" className="w-fit mt-1">
                       <Shield className="w-3 h-3 mr-1" />
                       Administrator
@@ -55,13 +74,13 @@ export function AdminHeader() {
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                  <Link href="/admin/settings" className="cursor-pointer">
-                    <Settings className="mr-2 h-4 w-4" />
-                    System Settings
+                  <Link href="/dashboard" className="cursor-pointer">
+                    <BookOpen className="mr-2 h-4 w-4" />
+                    Dashboard
                   </Link>
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem className="cursor-pointer">
+                <DropdownMenuItem className="cursor-pointer" onClick={handleLogout}>
                   <LogOut className="mr-2 h-4 w-4" />
                   Log out
                 </DropdownMenuItem>
