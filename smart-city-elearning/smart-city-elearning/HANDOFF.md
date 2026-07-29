@@ -111,8 +111,10 @@ Staged build; each stage verified with disposable fixtures (real user JWTs, exac
 
 1. **Admin management pages are still MOCK data** (original QA finding #3): `course-management.tsx` (except the now-real Create Course dialog), `user-management.tsx`, `analytics-dashboard.tsx` render hardcoded arrays; working API routes (`/api/users`, `/api/analytics`, `/api/admin/logs`) exist but are unused. Sidebar advertises many routes; only `/admin`, `/admin/users`, `/admin/courses`, `/admin/analytics`, `/admin/review` exist. Course Management's Edit/Delete/list/stats are still mock.
 2. **Wire `suggest_course_titles()` more widely:** only the Create Course prerequisites field uses it so far. Course title / other prerequisite inputs could get the same non-blocking nudge.
-3. **Enabling Confirm email** would additionally require: custom SMTP (built-in mailer rate-limits signups into 429) AND moving profile creation to a post-confirmation step (DB trigger/auth-callback) — the inline insert needs the immediate session that only exists when confirmation is off.
-4. **Storage review-freeze consequence:** an instructor cannot replace a module's PDF while it's `pending_review` (011 mirrors the 009 lock). If admins ever need to hand a PDF back for reswap without a full reject, that's a new flow.
+3. **Storage review-freeze consequence:** an instructor cannot replace a module's PDF while it's `pending_review` (011 mirrors the 009 lock). If admins ever need to hand a PDF back for reswap without a full reject, that's a new flow.
+
+## Deliberate NON-goals (do not resurface as open items)
+- **Email confirmation will NOT be enabled** — permanent product decision, not a technical gap. Registration stays confirmation-off (inline profile insert on the immediate session). Do not propose the SMTP + post-confirmation-profile-creation work; it is out of scope by choice.
 
 ---
 

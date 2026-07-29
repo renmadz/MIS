@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { BookOpenText, Bell, Settings, LogOut, Shield, GraduationCap } from "lucide-react"
+import { BookOpenText, Settings, LogOut, Shield, GraduationCap } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -84,10 +84,6 @@ export function Header() {
                   Dashboard
                 </Button>
               )}
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="w-4 h-4" />
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-destructive rounded-full"></span>
-              </Button>
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
