@@ -181,26 +181,6 @@ export default function HomePage() {
               </ul>
             </div>
             <div>
-              <h4 className="font-semibold mb-4">Support</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li>
-                  <Link href="/help" className="hover:text-foreground">
-                    Help Center
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/contact" className="hover:text-foreground">
-                    Contact Us
-                  </Link>
-                </li>
-                <li>
-                  <Link href="/faq" className="hover:text-foreground">
-                    FAQ
-                  </Link>
-                </li>
-              </ul>
-            </div>
-            <div>
               <h4 className="font-semibold mb-4">Region 2</h4>
               <ul className="space-y-2 text-sm text-muted-foreground">
                 <li>Cagayan Valley</li>

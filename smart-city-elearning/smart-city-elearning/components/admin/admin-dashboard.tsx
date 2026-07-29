@@ -10,7 +10,6 @@ import {
   BookOpen,
   Award,
   TrendingUp,
-  Building2,
   MapPin,
   AlertTriangle,
   CheckCircle,
@@ -393,7 +392,7 @@ export function AdminDashboard() {
             </CardHeader>
             <CardContent className="space-y-2">
               <Button variant="outline" className="w-full justify-start gap-2 bg-transparent" asChild>
-                <Link href="/admin/courses/new" prefetch={false}>
+                <Link href="/admin/courses" prefetch={false}>
                   <BookOpen className="w-4 h-4" />
                   Create New Course
                 </Link>
@@ -408,12 +407,6 @@ export function AdminDashboard() {
                 <Link href="/admin/analytics" prefetch={false}>
                   <BarChart3 className="w-4 h-4" />
                   View Analytics
-                </Link>
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-2 bg-transparent" asChild>
-                <Link href="/admin/organizations" prefetch={false}>
-                  <Building2 className="w-4 h-4" />
-                  Organization Management
                 </Link>
               </Button>
             </CardContent>

@@ -2,11 +2,16 @@ import { NextResponse } from "next/server"
 import { requireAdmin } from "@/lib/auth/api-auth"
 import { supabaseAdmin } from "@/lib/supabase/admin-client"
 
-export async function GET() {
+export async function GET(request: Request) {
   const { error } = await requireAdmin()
   if (error) {
     return error
   }
+
+  // Optional ?limit — defaults to 4 (the dashboard "recent activity" widget);
+  // the full /admin/logs page requests more. Capped to keep the payload sane.
+  const limitParam = Number(new URL(request.url).searchParams.get("limit"))
+  const limit = Number.isFinite(limitParam) && limitParam > 0 ? Math.min(limitParam, 200) : 4
 
   try {
     const admin = supabaseAdmin()
@@ -22,7 +27,7 @@ export async function GET() {
         users!admin_id(name)
       `)
       .order("created_at", { ascending: false })
-      .limit(4)
+      .limit(limit)
 
     if (logsError) {
       return NextResponse.json({ error: logsError.message }, { status: 500 })
