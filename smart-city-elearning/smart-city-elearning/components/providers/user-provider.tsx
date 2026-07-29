@@ -14,9 +14,23 @@ export type UserProfile = Pick<
 >
 
 const PROFILE_COLUMNS = "id,name,email,avatar,user_type,is_admin,is_instructor,status"
+const NOTIFICATION_COLUMNS = "id,type,title,message,link,read,created_at,module_id,certificate_id"
+const NOTIFICATION_LIMIT = 20
 const LOAD_TIMEOUT_MS = 9000
 
 type Status = "loading" | "ready" | "error"
+
+export type Notification = {
+  id: string
+  type: string
+  title: string
+  message: string
+  link: string | null
+  read: boolean
+  created_at: string
+  module_id: string | null
+  certificate_id: string | null
+}
 
 interface UserContextValue {
   profile: UserProfile | null
@@ -26,6 +40,16 @@ interface UserContextValue {
   error: boolean
   /** Re-run the full load (getUser + profile). Drives the loading/error UI. */
   retry: () => Promise<void>
+  /** Recent notifications for the current user (most recent first). */
+  notifications: Notification[]
+  /** Total unread count (not limited to the recent list). */
+  unreadCount: number
+  /** Mark one notification read (own row). */
+  markRead: (id: string) => Promise<void>
+  /** Mark all of the user's unread notifications read. */
+  markAllRead: () => Promise<void>
+  /** Force a notifications refetch (used after a mark action). */
+  refreshNotifications: () => Promise<void>
 }
 
 const UserContext = createContext<UserContextValue>({
@@ -33,6 +57,11 @@ const UserContext = createContext<UserContextValue>({
   loading: true,
   error: false,
   retry: async () => {},
+  notifications: [],
+  unreadCount: 0,
+  markRead: async () => {},
+  markAllRead: async () => {},
+  refreshNotifications: async () => {},
 })
 
 export function useUser() {
@@ -78,12 +107,56 @@ function withTimeout<T>(p: PromiseLike<T>, ms: number): Promise<T> {
 export function UserProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [status, setStatus] = useState<Status>("loading")
+  const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const pathname = usePathname()
 
   const profileIdRef = useRef<string | null>(null)
   useEffect(() => {
     profileIdRef.current = profile?.id ?? null
   }, [profile?.id])
+
+  // Notifications piggyback on the same refetch points as the profile (mount,
+  // navigation, non-signout auth events) — no independent polling loop.
+  const refetchNotifications = useCallback(async (id: string) => {
+    try {
+      const [list, count] = await Promise.all([
+        withTimeout(
+          supabaseBrowser.from("notifications").select(NOTIFICATION_COLUMNS)
+            .eq("user_id", id).order("created_at", { ascending: false }).limit(NOTIFICATION_LIMIT),
+          LOAD_TIMEOUT_MS
+        ),
+        withTimeout(
+          supabaseBrowser.from("notifications").select("id", { count: "exact", head: true })
+            .eq("user_id", id).eq("read", false),
+          LOAD_TIMEOUT_MS
+        ),
+      ])
+      if (!list.error && list.data) setNotifications(list.data as Notification[])
+      if (typeof count.count === "number") setUnreadCount(count.count)
+    } catch {
+      /* best-effort — keep last-known-good */
+    }
+  }, [])
+
+  const markRead = useCallback(async (id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n))) // optimistic
+    await supabaseBrowser.from("notifications").update({ read: true }).eq("id", id).eq("read", false)
+    if (profileIdRef.current) await refetchNotifications(profileIdRef.current)
+  }, [refetchNotifications])
+
+  const markAllRead = useCallback(async () => {
+    const id = profileIdRef.current
+    if (!id) return
+    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
+    setUnreadCount(0)
+    await supabaseBrowser.from("notifications").update({ read: true }).eq("user_id", id).eq("read", false)
+    await refetchNotifications(id)
+  }, [refetchNotifications])
+
+  const refreshNotifications = useCallback(async () => {
+    if (profileIdRef.current) await refetchNotifications(profileIdRef.current)
+  }, [refetchNotifications])
 
   // Best-effort profile-only refetch. On failure keeps the current profile and
   // never changes status — used by navigation and non-signout auth events.
@@ -122,12 +195,13 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (error) throw error
       setProfile(data as UserProfile)
       setStatus("ready")
+      refetchNotifications(user.id)
     } catch {
       // Timeout or network failure — surface a retryable error. Keep whatever
       // profile we already had (may be null on first load).
       setStatus("error")
     }
-  }, [])
+  }, [refetchNotifications])
 
   // Mount: one full load + the auth-state subscription.
   useEffect(() => {
@@ -138,26 +212,33 @@ export function UserProvider({ children }: { children: React.ReactNode }) {
       if (event === "SIGNED_OUT" || !session?.user) {
         setProfile(null)
         setStatus("ready")
+        setNotifications([])
+        setUnreadCount(0)
         return
       }
       // SIGNED_IN / USER_UPDATED / TOKEN_REFRESHED — best-effort, no status flip.
       refetchBackground(session.user.id)
+      refetchNotifications(session.user.id)
     })
 
     return () => sub.subscription.unsubscribe()
-  }, [loadFull, refetchBackground])
+  }, [loadFull, refetchBackground, refetchNotifications])
 
   // Navigation: best-effort refetch to catch DB-side role/status changes (which
-  // fire no auth event). Skips when signed out. Never flips to loading/error.
+  // fire no auth event) AND pick up new notifications. No independent poll loop.
   useEffect(() => {
     if (!profileIdRef.current) return
     refetchBackground(profileIdRef.current)
+    refetchNotifications(profileIdRef.current)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname])
 
   return (
     <UserContext.Provider
-      value={{ profile, loading: status === "loading", error: status === "error", retry: loadFull }}
+      value={{
+        profile, loading: status === "loading", error: status === "error", retry: loadFull,
+        notifications, unreadCount, markRead, markAllRead, refreshNotifications,
+      }}
     >
       {status === "error" && <ConnectionBanner onRetry={loadFull} />}
       {children}

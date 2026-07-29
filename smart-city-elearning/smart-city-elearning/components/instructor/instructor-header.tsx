@@ -16,6 +16,7 @@ import {
 import Link from "next/link"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
 import { useUser } from "@/components/providers/user-provider"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 
 export function InstructorHeader() {
   const router = useRouter()
@@ -51,6 +52,7 @@ export function InstructorHeader() {
           </Link>
 
           <div className="flex items-center gap-4">
+            <NotificationBell />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="relative h-10 w-10 rounded-full">

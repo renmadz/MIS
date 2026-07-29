@@ -17,6 +17,7 @@ import {
 import Link from "next/link"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
 import { useUser } from "@/components/providers/user-provider"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 
 export function Header() {
   const router = useRouter()
@@ -84,6 +85,8 @@ export function Header() {
                   Dashboard
                 </Button>
               )}
+
+              <NotificationBell />
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>

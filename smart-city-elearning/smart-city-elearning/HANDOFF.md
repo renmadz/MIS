@@ -21,7 +21,7 @@ This document is the durable record of project state as of the end of the prereq
 The live DB was **not** built from `001_initial_schema.sql`. Build new schema against live idioms:
 
 - **No enums for most columns.** `courses.level`, `enrollments.status`, `resources.type`, `lessons.type` are `text` + `CHECK`, not enums. Only `user_status` (users.status) and `enrollment_status` exist as enums, and even `enrollments.status` uses text+check, not the enum.
-- **UUID default is `uuid_generate_v4()`** (uuid-ossp), not `gen_random_uuid()`.
+- **UUID default: two conventions by table lineage (intentional, not drift).** Most `public` tables default `uuid_generate_v4()` (uuid-ossp). The system-write tables `certificates`, `admin_logs`, and `notifications` (014) default `gen_random_uuid()`. Match the lineage of the table you're touching.
 - **NOT NULL without defaults** on `courses.description/category/thumbnail/instructor/target_audience` — inserts must supply them (else `23502`).
 - **FKs are nullable** on `modules.course_id`, `lessons.module_id`, `resources.module_id`, `enrollments.user_id/course_id`. All FKs are `ON DELETE CASCADE`.
 - **`courses.rating` = float8**, **`enrollments.grade` = int4** (not the numeric types in `001`).
