@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import dynamic from "next/dynamic"
 import Link from "next/link"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
+import { useUser } from "@/components/providers/user-provider"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -35,10 +36,11 @@ export function ModuleEditor({
   courseId,
   moduleId,
 }: {
-  courseId: string
+  courseId: string | null // null = standalone/orphan module (no course yet)
   moduleId: string // real uuid, or the literal "new"
 }) {
   const router = useRouter()
+  const { profile } = useUser()
   const isNew = moduleId === "new"
 
   const [loading, setLoading] = useState(true)
@@ -46,6 +48,9 @@ export function ModuleEditor({
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
 
+  // The module's ACTUAL course assignment (null = unassigned). Drives the storage
+  // path and the header label; distinct from the route's courseId prop.
+  const [moduleCourseId, setModuleCourseId] = useState<string | null>(courseId)
   const [courseTitle, setCourseTitle] = useState("")
   const [status, setStatus] = useState<string>("draft")
   const [reviewNotes, setReviewNotes] = useState<string | null>(null)
@@ -78,30 +83,36 @@ export function ModuleEditor({
   useEffect(() => {
     const load = async () => {
       try {
-        const { data: course, error: courseError } = await supabaseBrowser
-          .from("courses")
-          .select("id, title")
-          .eq("id", courseId)
-          .single()
-        if (courseError) throw new Error(courseError.message)
-        setCourseTitle(course.title)
+        const setCourseLabel = async (cid: string | null) => {
+          setModuleCourseId(cid)
+          if (cid) {
+            const { data: course } = await supabaseBrowser
+              .from("courses").select("title").eq("id", cid).maybeSingle()
+            setCourseTitle(course?.title ?? "Unknown course")
+          } else {
+            setCourseTitle("Not assigned to a course yet")
+          }
+        }
 
         if (isNew) {
-          // Suggest the next order value rather than making the instructor guess.
-          const { data: siblings } = await supabaseBrowser
-            .from("modules")
-            .select("order")
-            .eq("course_id", courseId)
-          const maxOrder = (siblings ?? []).reduce(
-            (max: number, m: { order: number }) => Math.max(max, m.order ?? 0), 0
-          )
-          setOrder(String(maxOrder + 1))
+          await setCourseLabel(courseId)
+          if (courseId) {
+            // Suggest the next order among this course's modules.
+            const { data: siblings } = await supabaseBrowser
+              .from("modules").select("order").eq("course_id", courseId)
+            const maxOrder = (siblings ?? []).reduce(
+              (max: number, m: { order: number }) => Math.max(max, m.order ?? 0), 0
+            )
+            setOrder(String(maxOrder + 1))
+          } else {
+            setOrder("1") // orphan module has no course siblings
+          }
           return
         }
 
         const { data: mod, error: modError } = await supabaseBrowser
           .from("modules")
-          .select("id, title, description, order, estimated_duration, is_required, status, review_notes")
+          .select("id, title, description, order, estimated_duration, is_required, status, review_notes, course_id")
           .eq("id", moduleId)
           .single()
         if (modError) throw new Error(modError.message)
@@ -113,6 +124,7 @@ export function ModuleEditor({
         setIsRequired(!!mod.is_required)
         setStatus(mod.status)
         setReviewNotes(mod.review_notes)
+        await setCourseLabel(mod.course_id) // the module's REAL assignment
 
         const { data: resource } = await supabaseBrowser
           .from("resources")
@@ -172,10 +184,13 @@ export function ModuleEditor({
     const lessonError = validateLessons(lessons)
     if (lessonError) { setError(lessonError); return null }
 
+    if (!profile?.id) { setError("Not signed in."); return null }
+
     setBusy(true)
     try {
-      const payload = {
-        course_id: courseId,
+      // course_id + created_by are set only at INSERT. Updates never touch them:
+      // created_by is immutable, and course_id assignment is admin-only (013 trigger).
+      const basePayload = {
         title: title.trim(),
         description: description.trim(),
         order: Number(order),
@@ -185,28 +200,34 @@ export function ModuleEditor({
 
       let id = savedModuleId
       if (!id) {
-        // status is left to the column default ('draft') — instructors are not
-        // permitted to set publish states (008 WITH CHECK).
+        // status left to the column default ('draft'). created_by MUST be the
+        // caller (013 modules_instructor_insert WITH CHECK). course_id is the
+        // route context — null for a standalone/orphan module.
         const { data, error: insertError } = await supabaseBrowser
           .from("modules")
-          .insert(payload)
+          .insert({ ...basePayload, course_id: courseId, created_by: profile.id })
           .select("id, status")
           .single()
         if (insertError) throw new Error(insertError.message)
         id = data.id
         setSavedModuleId(id)
         setStatus(data.status)
+        setModuleCourseId(courseId)
       } else {
         const { error: updateError } = await supabaseBrowser
           .from("modules")
-          .update(payload)
+          .update(basePayload)
           .eq("id", id)
         if (updateError) throw new Error(updateError.message)
       }
 
       await persistLessons(id!)
       setNotice("Draft saved.")
-      if (isNew) router.replace(`/instructor/courses/${courseId}/modules/${id}`)
+      if (isNew) {
+        router.replace(courseId
+          ? `/instructor/courses/${courseId}/modules/${id}`
+          : `/instructor/modules/${id}`)
+      }
       return id
     } catch (err: any) {
       setError(err.message || "Failed to save draft.")
@@ -264,7 +285,9 @@ export function ModuleEditor({
 
     setBusy(true)
     try {
-      const path = `courses/${courseId}/modules/${id}/material.pdf`
+      // Orphan modules upload under 'unassigned'; the [4]=module_id segment is what
+      // storage RLS keys on, so the object never needs moving after assignment.
+      const path = `courses/${moduleCourseId ?? "unassigned"}/modules/${id}/material.pdf`
       const { error: uploadError } = await supabaseBrowser.storage
         .from("course-materials")
         .upload(path, file, { upsert: true, contentType: "application/pdf" })

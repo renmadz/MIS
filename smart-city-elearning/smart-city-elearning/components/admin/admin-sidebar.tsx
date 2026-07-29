@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Home, Users, BookOpen, BarChart3, ClipboardCheck } from "lucide-react"
+import { Home, Users, BookOpen, BarChart3, ClipboardCheck, FolderInput } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
@@ -37,6 +37,7 @@ export function AdminSidebar() {
     { title: "User Management", href: "/admin/users", icon: Users, badge: userCount != null ? userCount.toLocaleString() : undefined },
     { title: "Course Management", href: "/admin/courses", icon: BookOpen, badge: courseCount != null ? courseCount.toLocaleString() : undefined },
     { title: "Content Review", href: "/admin/review", icon: ClipboardCheck, badge: pendingCount != null && pendingCount > 0 ? String(pendingCount) : undefined },
+    { title: "Assign Modules", href: "/admin/assign", icon: FolderInput },
     { title: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   ]
 

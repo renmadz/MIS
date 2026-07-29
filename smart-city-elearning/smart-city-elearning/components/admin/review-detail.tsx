@@ -64,7 +64,7 @@ export function ReviewDetail({ moduleId }: { moduleId: string }) {
             ? supabaseBrowser.from("users").select("name").eq("id", mod.submitted_by).maybeSingle()
             : Promise.resolve({ data: null }),
         ])
-        setCourseTitle(course?.title ?? "—")
+        setCourseTitle(mod.course_id ? (course?.title ?? "Unknown course") : "Not yet assigned")
         setInstructorName(submitter?.name ?? "—")
 
         const { data: lessonRows } = await supabaseBrowser

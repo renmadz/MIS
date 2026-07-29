@@ -50,7 +50,7 @@ export function ReviewQueue() {
           id: m.id,
           title: m.title,
           submitted_at: m.submitted_at,
-          courseTitle: courseTitle[m.course_id] ?? "—",
+          courseTitle: m.course_id ? (courseTitle[m.course_id] ?? "Unknown course") : "Not yet assigned",
           instructorName: userName[m.submitted_by] ?? "—",
         })))
       } catch (err: any) {
