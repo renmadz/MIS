@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Eye, EyeOff, Mail, Lock, Building2 } from "lucide-react"
+import Link from "next/link"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
 import { getUserByEmail } from "@/lib/database/client-queries"
 
@@ -145,8 +146,8 @@ export function LoginForm() {
       </Button>
 
       <div className="text-center">
-        <Button variant="link" className="text-sm text-muted-foreground">
-          Forgot your password?
+        <Button variant="link" className="text-sm text-muted-foreground" asChild>
+          <Link href="/forgot-password">Forgot your password?</Link>
         </Button>
       </div>
     </form>

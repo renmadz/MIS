@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
-import { BookOpen, Award, Clock, TrendingUp, Users, Target, Calendar, Play, Building2 } from "lucide-react"
+import { BookOpen, Award, Clock, TrendingUp, Target, Calendar, Play, Building2 } from "lucide-react"
 import Link from "next/link"
 import type { User, Course, Event } from "@/lib/types/database"
 import { EVENT_TYPE_LABEL, eventDate, eventTime } from "@/lib/events/format"
@@ -263,10 +263,6 @@ export function DashboardContent({
                   <Award className="w-4 h-4" />
                   View Certificates
                 </Link>
-              </Button>
-              <Button variant="outline" className="w-full justify-start gap-2 bg-transparent">
-                <Users className="w-4 h-4" />
-                Invite Team Members
               </Button>
             </CardContent>
           </Card>

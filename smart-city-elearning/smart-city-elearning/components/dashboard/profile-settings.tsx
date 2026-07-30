@@ -523,13 +523,27 @@ export function ProfileSettings() {
               <CardDescription>Choose how you want to be notified about course updates and activities</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* These switches are NOT wired to any storage. Rather than let them
+                  look interactive and silently discard the user's choice, they are
+                  disabled and unchecked, and the note below says why. */}
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <span className="font-medium">Not yet available.</span> Notification preferences
+                  can&apos;t be changed yet — these controls are disabled until the setting is built.
+                  You still receive in-app notifications (the bell in the header) for module reviews,
+                  course assignments and issued certificates; this page just can&apos;t turn them on
+                  or off yet.
+                </AlertDescription>
+              </Alert>
+
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>Course Updates</Label>
                     <p className="text-sm text-muted-foreground">New lessons, assignments, and announcements</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch disabled aria-label="Course Updates (not yet available)" />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -537,7 +551,7 @@ export function ProfileSettings() {
                     <Label>Certificate Notifications</Label>
                     <p className="text-sm text-muted-foreground">When certificates are ready for download</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch disabled aria-label="Certificate Notifications (not yet available)" />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -545,7 +559,7 @@ export function ProfileSettings() {
                     <Label>Team Activity</Label>
                     <p className="text-sm text-muted-foreground">Updates from your organization team</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch disabled aria-label="Team Activity (not yet available)" />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -553,7 +567,7 @@ export function ProfileSettings() {
                     <Label>Event Reminders</Label>
                     <p className="text-sm text-muted-foreground">Webinars, workshops, and conferences</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch disabled aria-label="Event Reminders (not yet available)" />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -561,11 +575,13 @@ export function ProfileSettings() {
                     <Label>Marketing Communications</Label>
                     <p className="text-sm text-muted-foreground">New courses and platform updates</p>
                   </div>
-                  <Switch />
+                  <Switch disabled aria-label="Marketing Communications (not yet available)" />
                 </div>
-              </div>
 
-              <Button disabled>Save Preferences</Button>
+                {/* Grouped inside the same dimmed block so its disabled state reads
+                    as belonging to the controls above, not as a broken button. */}
+                <Button disabled>Save Preferences</Button>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -580,13 +596,25 @@ export function ProfileSettings() {
               <CardDescription>Manage your privacy settings and account security</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
+              {/* Same reasoning as the notifications tab: not wired to storage,
+                  so disabled and unchecked rather than falsely interactive. */}
+              <Alert>
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <span className="font-medium">Not yet available.</span> Privacy controls
+                  can&apos;t be changed yet. Note that certificates you earn remain publicly
+                  verifiable by their verification link — that is how employers confirm a
+                  credential, and it is not currently optional.
+                </AlertDescription>
+              </Alert>
+
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label>Profile Visibility</Label>
                     <p className="text-sm text-muted-foreground">Show your profile to other learners</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch disabled aria-label="Profile Visibility (not yet available)" />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -594,7 +622,7 @@ export function ProfileSettings() {
                     <Label>Progress Sharing</Label>
                     <p className="text-sm text-muted-foreground">Allow team members to see your progress</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch disabled aria-label="Progress Sharing (not yet available)" />
                 </div>
 
                 <div className="flex items-center justify-between">
@@ -602,7 +630,7 @@ export function ProfileSettings() {
                     <Label>Certificate Verification</Label>
                     <p className="text-sm text-muted-foreground">Allow public verification of your certificates</p>
                   </div>
-                  <Switch defaultChecked />
+                  <Switch disabled aria-label="Certificate Verification (not yet available)" />
                 </div>
               </div>
 
