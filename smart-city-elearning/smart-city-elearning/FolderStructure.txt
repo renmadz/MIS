@@ -193,7 +193,6 @@ C:.
 ¦   ¦   utils.ts
 ¦   ¦   
 ¦   +---database
-¦   ¦       mock-data.ts
 ¦   ¦       queries.ts
 ¦   ¦       
 ¦   +---types
