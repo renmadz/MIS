@@ -40,7 +40,7 @@ Leave the dev server running while you edit — it hot-reloads. Only a *producti
 
 ## 2. What's fully built and working
 
-**Authentication & roles** — email/password sign-in, registration with organization type and Region 02 location, three roles (learner / instructor / admin) enforced in middleware and RLS.
+**Authentication & roles** — email/password sign-in, registration with organization type and Region 02 location, three roles (learner / instructor / admin) enforced in middleware and RLS. **Self-service password reset** (`/forgot-password` → emailed link → `/reset-password`): the reset page handles both token formats Supabase can deliver — implicit `#access_token` via `setSession()` and PKCE `?code=` via `exchangeCodeForSession()` — so it works regardless of which email template or link source produced the link. The request screen returns an identical message for known and unknown addresses (no user enumeration), and tokens are single-use.
 
 **Learner** — course catalogue with debounced search and filters (server-rendered, cached), course detail with prerequisite gating, PDF module reader with page-marked lessons, progress tracking, certificates with public verification, personal dashboard, Team Progress for organization members, events listing.
 
@@ -60,9 +60,9 @@ Leave the dev server running while you edit — it hot-reloads. Only a *producti
 |---|---|---|
 | **Email confirmation** | Off | Deliberate. Needs an SMTP provider and a decision on who operates it. The registration flow **already handles the confirmed-email path correctly** (`register-form.tsx` detects a user returned without a session and directs them to their inbox) — flipping it on in Supabase Auth should require no code change |
 | **Terms of Service / Privacy Policy** | Links exist, inert | Deliberate. Needs real legal text from the SSCP program, especially on participant data handling. Not something a developer should author. Wire the links once text exists |
-| **Password reset** | Not built | Genuine gap. No self-service recovery today. Supabase provides `resetPasswordForEmail`; needs a reset page and an email path (see the SMTP dependency above) |
-| **Notification / privacy preference toggles** | Non-functional | `profile-settings.tsx` renders 8 switches with `defaultChecked` and no persistence, plus a disabled "Save Preferences" button. They look interactive and are not. Either back them with a table or disable them honestly — the current state is the most misleading surface left |
-| **"Invite Team Members" button** | Non-functional | Dashboard quick action with no handler. Remove it or build invitations |
+| **Password-reset email volume** | Works, but throttled | Uses Supabase's **built-in mailer**, which sends fine today — verified live, including that it still works with signup confirmation off (`mailer_autoconfirm: true` governs signup only; recovery is a separate template). It is aggressively rate-limited, though: a second request seconds later returns `over_email_send_rate_limit`. Fine for occasional resets, not for volume. Configure custom SMTP in the Supabase dashboard if that changes — **no code change needed** |
+| **Storing notification / privacy preferences** | Not built | The 8 switches in `profile-settings.tsx` are now genuinely `disabled` (verified with a forced click — `data-state` does not change), with `defaultChecked` removed so none falsely shows "on", and a "Not yet available" note on each tab. The notes state real current behaviour — in-app notifications still arrive via the bell, and certificates remain publicly verifiable — so a switched-off toggle isn't read as a broken feature. Backing them with a `user_preferences` table is the remaining work |
+| **"Change Password" button** | Disabled, but now easy | Sits in the Privacy tab's Account Security block. A working reset flow exists at `/forgot-password`, so this is a small wiring job — either link to it, or call `resetPasswordForEmail` for the signed-in user's own address. Distinct from the preference-toggle work above |
 | **Two placeholder learning paths** | Shown, labelled | The ~18 courses they list do not exist — each was checked against the catalogue individually (0 exact matches, no close equivalents). Hardcoded in `learning-paths-dashboard.tsx` and `learning-path-grid.tsx`, gated behind the `show_placeholder_learning_paths` setting and disclosed in the admin UI. Delete both arrays once real paths replace them |
 | **Learner Analytics / Organization / Help Center** | Greyed in sidebar | Never built. Correctly disabled rather than linking to nothing — the routes genuinely do not exist |
 | **`images.unoptimized`** | Resolved | Optimization is enabled; noted here only because older notes in HANDOFF.md describe it as outstanding |
@@ -71,19 +71,20 @@ Leave the dev server running while you edit — it hot-reloads. Only a *producti
 
 ## 4. Recommended next steps
 
+The three items that used to head this list — password reset, the misleading preference toggles, and the dead "Invite Team Members" button — are **done**. What follows is what actually remains.
+
 **High value, low effort**
-1. **Wire or disable the preference toggles.** Users currently believe they're setting something. Disabling them is a ten-minute honest fix; a `user_preferences` table is the real one
-2. **Add password reset.** Small, self-contained, and a real support burden without it
-3. **Remove or implement "Invite Team Members."**
+1. **Wire the "Change Password" button** to the reset flow at `/forgot-password`. The last disabled control with a working counterpart already behind it
 
 **Needs input from the program, not code**
-4. Terms of Service and Privacy Policy text
-5. The email-confirmation / SMTP decision
+2. Terms of Service and Privacy Policy text
+3. The email-confirmation / SMTP decision — the same decision that lifts the password-reset rate limit
 
 **Larger**
-6. **Author real content** — the platform's biggest gap is courses, not features. Once real learning paths exist, delete the two placeholder arrays and the `app_settings` toggle that hides them
-7. **Build the deferred learner screens** (Analytics, Organization, Help Center) if they're actually wanted — verify the need before building; they've been greyed out since the original prototype
-8. **Consider tightening `learningpath_courses` writes further** — reads now follow the parent's status (018), and writes are admin-only, so this is a consistency nicety rather than a live risk
+4. **Author real content** — the platform's biggest gap is courses, not features. Once real learning paths exist, delete the two placeholder arrays and the `app_settings` toggle that hides them
+5. **Store real notification and privacy preferences** (`user_preferences` table), then enable the switches that are currently disabled
+6. **Build the deferred learner screens** (Analytics, Organization, Help Center) if they're actually wanted — verify the need before building; they've been greyed out since the original prototype
+7. **Consider tightening `learningpath_courses` writes further** — reads now follow the parent's status (018), and writes are admin-only, so this is a consistency nicety rather than a live risk
 
 ---
 

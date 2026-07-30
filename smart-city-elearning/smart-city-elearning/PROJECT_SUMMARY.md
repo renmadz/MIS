@@ -37,7 +37,7 @@ The project arrived as a **working prototype**: the visual design, page layouts,
 
 ## 3. Critical issues found and fixed — the security remediation arc
 
-This was the largest and most consequential part of the work. A structured QA audit of the database identified numbered findings, each closed by a version-controlled migration and verified against the live database with disposable test accounts before being considered done.
+This was the largest and most consequential part of the work. A structured QA audit of the database identified numbered findings, each closed by a version-controlled migration or an application-layer fix, and verified against the live database with disposable test accounts before being considered done.
 
 ### Vulnerabilities closed
 
@@ -77,7 +77,7 @@ The single most important lesson of this project. **On seven separate occasions*
 
 Additionally, several column types differ live from what the initial schema declares (for example `organizations.type` is plain text, not the declared enum) — differences that cause immediate failures if trusted blindly.
 
-**Practical consequence:** every database change in this project was verified against the live system, not assumed from the files. That discipline is why findings 9 and 10 were caught at all.
+**Practical consequence:** every database change in this project was verified against the live system, not assumed from the files. That discipline is why findings 13 and 14 were caught at all.
 
 ### Also removed
 
@@ -109,6 +109,7 @@ A complete authoring-and-approval pipeline, built from nothing:
 - **Prerequisite enforcement** — enforced consistently at the catalogue, course detail, module access, and database function levels
 - **Certificate integrity** — issuance blocked on courses with no lessons, with an honest error instead of a silent failure
 - **Admin audit trail** — administrative actions are recorded to a real activity log
+- **Self-service password reset** — a participant who forgets their password can recover it themselves, without an administrator. The request screen returns the same message whether or not the address is registered, so it cannot be used to discover who holds an account; reset links are single-use and expire
 
 ### Honesty pass over the interface
 
@@ -118,6 +119,8 @@ Every screen showing invented data was either connected to real data or removed:
 - The admin header shows the real signed-in administrator
 - Fabricated dashboard statistics were removed rather than approximated
 - Navigation links pointing at non-existent pages were removed or built
+- A non-functional "Invite Team Members" button was removed rather than left to do nothing when clicked
+- The Profile Settings preference switches, which silently discarded every change, are now genuinely disabled and labelled "Not yet available" — each with a note stating what actually happens today, so a switched-off toggle is not mistaken for a broken feature
 - Two remaining demonstration learning paths are clearly labelled as such in the admin interface, with a switch to hide them — the honest interim while real content is authored
 
 ---
@@ -142,10 +145,13 @@ Every screen showing invented data was either connected to real data or removed:
 - **Email confirmation is off.** Enabling it requires a configured SMTP provider and a decision about who operates it. The registration flow already handles the confirmation path correctly if it is switched on later — this is a deployment decision, not missing code
 - **Terms of Service and Privacy Policy are not written.** The links exist but are inert. These require actual legal text from the SSCP program, particularly regarding participant data handling. A developer should not invent them
 
+**Operational note, not a defect:**
+
+- **Password reset uses Supabase's built-in mailer.** This works today and required no additional infrastructure — confirmed against the live system, including that it still sends correctly while signup confirmation is switched off. The built-in mailer is, however, rate-limited and not intended for production volume. If reset requests become frequent, configuring custom SMTP in the Supabase dashboard is the recommended step — a settings change, with no code change required
+
 **Genuine gaps:**
 
-- **No password reset.** There is no self-service recovery; a user who forgets their password needs an administrator
-- **Notification and privacy preference toggles do not save.** The Profile Settings screens present switches that are not connected to storage. They should be wired to real settings or disabled until they are
+- **Preference toggles are disabled, not built.** The notification and privacy switches in Profile Settings are now honestly non-interactive with a "Not yet available" note, rather than silently discarding changes. Storing real preferences remains unbuilt
 - **Two demonstration learning paths remain.** Their ~18 listed courses do not exist on the platform — verified individually against the catalogue with zero matches. They are labelled as placeholders in the admin interface and can be switched off; they should be deleted once real paths replace them
 - **The production cache behaviour is only partly verifiable locally.** Development servers do not cache the way production does
 
@@ -156,16 +162,18 @@ Every screen showing invented data was either connected to real data or removed:
 Roughly in priority order:
 
 1. **Author real content.** The platform is ready; it currently holds a small number of courses and one genuine learning path. This is a content task, not a development one
-2. **Wire or disable the preference toggles** in Profile Settings — currently the most visible "looks functional but is not" surface remaining
-3. **Add password reset** — small piece of work; Supabase Auth provides the mechanism
-4. **Supply Terms of Service and Privacy Policy text** from the program
-5. **Decide on email confirmation** and configure SMTP if it is wanted
+2. **Supply Terms of Service and Privacy Policy text** from the program
+3. **Decide on email confirmation** and configure SMTP if it is wanted — the same SMTP decision also lifts the rate limit on password-reset emails
+4. **Store real notification and privacy preferences**, so the disabled toggles can be enabled
+5. **Wire the "Change Password" button** in Profile Settings to the reset flow that now exists — small, and the last remaining disabled control with a working counterpart behind it
 6. **Build the deferred learner screens** — personal Analytics, Organization, and Help Center are visible-but-greyed in the sidebar, honestly marked as unbuilt rather than broken
 
 ---
 
 ## Summary
 
-The platform arrived looking finished and was not. Fourteen distinct security vulnerabilities were closed, including exposure of every participant's personal information, a path for any user to grant themselves administrator access, and an authentication bypass that let a rejected login proceed anyway. The requested instructor and admin review workflow was built end to end, along with several features beyond the original scope. Every screen that displayed invented data was connected to real records or removed.
+The platform arrived looking finished and was not. Fourteen distinct security vulnerabilities were closed, including exposure of every participant's personal information, a path for any user to grant themselves administrator access, and an authentication bypass that let a rejected login proceed anyway. The requested instructor and admin review workflow was built end to end, along with several features beyond the original scope. Every screen that displayed invented data was connected to real records or removed, and every control that looked functional but was not is now either working or honestly disabled.
+
+What remains open is largely not development work: authoring real course content, and supplying the legal text and email-provider decisions that belong to the program rather than to a developer.
 
 Every database change was verified against the live system with disposable test accounts and cleaned up afterwards, because this project repeatedly demonstrated that the migration files alone could not be trusted to describe reality.
