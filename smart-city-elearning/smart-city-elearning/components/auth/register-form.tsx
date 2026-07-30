@@ -10,6 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Eye, EyeOff, Mail, Lock, User, Building2, MapPin, CheckCircle, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
+import { OrganizationPicker } from "@/components/organizations/organization-picker"
 
 // Hardcoded provinces and cities for Region 2
 const region2Locations = {
@@ -131,6 +132,7 @@ export function RegisterForm() {
     confirmPassword: "",
     userType: "",
     organization: "",
+    organizationId: null as string | null,
     position: "",
     province: "", // Renamed from location to match database
     city: "",
@@ -148,7 +150,10 @@ export function RegisterForm() {
       const formattedProvince = formData.province.charAt(0).toUpperCase() + formData.province.slice(1)
       setFormData((prev) => ({
         ...prev,
-        organization: `LGU ${formData.city}, ${formattedProvince}`
+        organization: `LGU ${formData.city}, ${formattedProvince}`,
+        // The derived name is still resolved against the registry by the
+        // picker's exact-match rule; it only links if an entry matches exactly.
+        organizationId: null,
       }))
     }
   }, [formData.userType, formData.city, formData.province])
@@ -222,7 +227,10 @@ export function RegisterForm() {
         email: formData.email,
         name: `${formData.firstName} ${formData.lastName}`,
         user_type: formData.userType as "individual" | "lgu" | "suc" | "hei" | "dost" | "government",
-        organization: formData.organization,
+        // Trimmed so the stored free text matches what the picker and the
+        // migration backfill both treat as an exact name.
+        organization: formData.organization.trim(),
+        organization_id: formData.organizationId,
         position: formData.position,
         region: "Region 2",
         province: formData.province,
@@ -248,6 +256,7 @@ export function RegisterForm() {
         confirmPassword: "",
         userType: "",
         organization: "",
+        organizationId: null,
         position: "",
         province: "",
         city: "",
@@ -324,7 +333,7 @@ export function RegisterForm() {
 
       <div className="space-y-2">
         <Label htmlFor="userType">Organization Type</Label>
-        <Select value={formData.userType} onValueChange={(value) => setFormData({ ...formData, userType: value, province: "", city: "", organization: "" })}>
+        <Select value={formData.userType} onValueChange={(value) => setFormData({ ...formData, userType: value, province: "", city: "", organization: "", organizationId: null })}>
           <SelectTrigger>
             <Building2 className="w-4 h-4 mr-2" />
             <SelectValue placeholder="Select your organization type" />
@@ -342,11 +351,12 @@ export function RegisterForm() {
 
       <div className="space-y-2">
         <Label htmlFor="organization">Organization/Institution Name</Label>
-        <Input
-          id="organization"
-          placeholder="Enter your organization name"
+        <OrganizationPicker
           value={formData.organization}
-          onChange={(e) => formData.userType !== "lgu" && setFormData({ ...formData, organization: e.target.value })}
+          organizationId={formData.organizationId}
+          onChange={({ organization, organization_id }) =>
+            setFormData((prev) => ({ ...prev, organization, organizationId: organization_id }))
+          }
           disabled={formData.userType === "lgu"}
           required
         />
@@ -369,7 +379,7 @@ export function RegisterForm() {
           <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Select
             value={formData.province}
-            onValueChange={(value) => setFormData({ ...formData, province: value, city: "", organization: formData.userType === "lgu" ? "" : formData.organization })}
+            onValueChange={(value) => setFormData({ ...formData, province: value, city: "", organization: formData.userType === "lgu" ? "" : formData.organization, organizationId: formData.userType === "lgu" ? null : formData.organizationId })}
           >
             <SelectTrigger className="pl-10">
               <SelectValue placeholder="Select your province" />

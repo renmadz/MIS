@@ -4,6 +4,7 @@ export interface User {
   name: string
   user_type: "individual" | "lgu" | "suc" | "hei" | "dost" | "government"
   organization?: string
+  organization_id?: string | null
   position?: string
   region: string
   province?: string

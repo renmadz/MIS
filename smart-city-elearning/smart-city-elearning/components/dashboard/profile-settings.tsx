@@ -17,6 +17,8 @@ import { supabaseBrowser } from "@/lib/supabase/browser-client"
 import { getUserByEmail } from "@/lib/database/client-queries"
 import type { User } from "@/lib/types/database"
 
+import { OrganizationPicker } from "@/components/organizations/organization-picker"
+
 // Hardcoded provinces and cities for Region 2
 const region2Locations = {
   batanes: [
@@ -131,6 +133,7 @@ export function ProfileSettings() {
     email: "",
     user_type: "",
     organization: "",
+    organization_id: null as string | null,
     position: "",
     province: "",
     city: "",
@@ -160,6 +163,7 @@ export function ProfileSettings() {
           email: userData.email || "",
           user_type: userData.user_type || "",
           organization: userData.organization || "",
+          organization_id: userData.organization_id ?? null,
           position: userData.position || "",
           province: userData.province || "",
           city: userData.city || "",
@@ -190,7 +194,9 @@ export function ProfileSettings() {
       const formattedProvince = formData.province.charAt(0).toUpperCase() + formData.province.slice(1)
       setFormData((prev) => ({
         ...prev,
-        organization: `LGU ${formData.city}, ${formattedProvince}`
+        organization: `LGU ${formData.city}, ${formattedProvince}`,
+        // Derived name still links only on an exact registry match.
+        organization_id: null,
       }))
     } else if (formData.user_type !== "lgu") {
       setFormData((prev) => ({
@@ -269,7 +275,10 @@ export function ProfileSettings() {
         name: formData.name,
         email: formData.email,
         user_type: formData.user_type as 'individual' | 'lgu' | 'suc' | 'hei' | 'dost' | 'government',
-        organization: formData.organization || undefined,
+        // Trimmed so the stored free text matches what the picker and the
+        // migration backfill both treat as an exact name.
+        organization: formData.organization.trim() || undefined,
+        organization_id: formData.organization_id ?? null,
         position: formData.position || undefined,
         province: formData.province || undefined,
         city: formData.city || undefined,
@@ -439,10 +448,12 @@ export function ProfileSettings() {
 
               <div className="space-y-2">
                 <Label htmlFor="organization">Organization Name</Label>
-                <Input
-                  id="organization"
+                <OrganizationPicker
                   value={formData.organization}
-                  onChange={(e) => formData.user_type !== "lgu" && handleChange('organization', e.target.value)}
+                  organizationId={formData.organization_id}
+                  onChange={({ organization, organization_id }) =>
+                    setFormData((prev) => ({ ...prev, organization, organization_id }))
+                  }
                   disabled={formData.user_type === "lgu"}
                 />
               </div>

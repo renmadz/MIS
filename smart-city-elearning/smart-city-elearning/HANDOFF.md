@@ -22,6 +22,8 @@ The live DB was **not** built from `001_initial_schema.sql`. Build new schema ag
 
 - **No enums for most columns.** `courses.level`, `enrollments.status`, `resources.type`, `lessons.type` are `text` + `CHECK`, not enums. Only `user_status` (users.status) and `enrollment_status` exist as enums, and even `enrollments.status` uses text+check, not the enum.
 - **UUID default: two conventions by table lineage (intentional, not drift).** Most `public` tables default `uuid_generate_v4()` (uuid-ossp). The system-write tables `certificates`, `admin_logs`, and `notifications` (014) default `gen_random_uuid()`. Match the lineage of the table you're touching.
+- **`organizations.type` is `text`** in live, not the `organization_type` enum `001` declares. A function returning it must declare `text` or it fails with a result-type mismatch. (`users.status` genuinely IS the `public.user_status` enum.)
+- **SECURITY DEFINER safety comes from the function's own logic, not from GRANTs.** Postgres grants `EXECUTE` to `PUBLIC` by default, so any such function is callable by `anon` whether or not it was granted to `anon` — verified live (an anon session calls `suggest_course_titles` and gets the same rows as service role). Every function must therefore be safe on its own terms when `auth.uid()` is NULL; never rely on GRANT/REVOKE as the access control.
 - **NOT NULL without defaults** on `courses.description/category/thumbnail/instructor/target_audience` — inserts must supply them (else `23502`).
 - **FKs are nullable** on `modules.course_id`, `lessons.module_id`, `resources.module_id`, `enrollments.user_id/course_id`. All FKs are `ON DELETE CASCADE`.
 - **`courses.rating` = float8**, **`enrollments.grade` = int4** (not the numeric types in `001`).

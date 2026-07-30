@@ -45,11 +45,6 @@ export function DashboardContent({
     { title: "Regional Conference", date: "Dec 22, 2024", time: "9:00 AM", type: "Conference" },
   ]
 
-  const teamProgress = {
-    members: 12,
-    averageProgress: 68,
-  }
-
   if (isLoading) {
     return <div className="space-y-6">Loading dashboard...</div>
   }
@@ -244,32 +239,6 @@ export function DashboardContent({
               <Button variant="outline" size="sm" className="w-full bg-transparent">
                 View All Events
               </Button>
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <Users className="w-5 h-5" />
-                Team Progress
-              </CardTitle>
-              <CardDescription>[Placeholder: No team data available yet]</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                <div className="flex items-center justify-between text-sm">
-                  <span>Team Members</span>
-                  <span className="font-medium">{teamProgress.members} active</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span>Average Progress</span>
-                  <span className="font-medium">{teamProgress.averageProgress}%</span>
-                </div>
-                <Progress value={teamProgress.averageProgress} className="h-2" />
-                <Button variant="outline" size="sm" className="w-full bg-transparent">
-                  View Team
-                </Button>
-              </div>
             </CardContent>
           </Card>
 

@@ -22,6 +22,7 @@ import { supabaseBrowser } from "@/lib/supabase/browser-client"
 export function DashboardSidebar() {
   const pathname = usePathname()
   const [userType, setUserType] = useState<string | null>(null)
+  const [organizationId, setOrganizationId] = useState<string | null>(null)
   const [courseCount, setCourseCount] = useState<number>(0)
   const [certificateCount, setCertificateCount] = useState<number>(0)
   const [isLoading, setIsLoading] = useState(true)
@@ -36,10 +37,11 @@ export function DashboardSidebar() {
 
       const { data: userData } = await supabaseBrowser
         .from("users")
-        .select("user_type")
+        .select("user_type, organization_id")
         .eq("email", user.email)
         .single()
       setUserType(userData?.user_type || null)
+      setOrganizationId(userData?.organization_id || null)
 
       const { data: enrollmentData } = await supabaseBrowser
         .from("enrollments")
@@ -95,7 +97,9 @@ export function DashboardSidebar() {
       href: "/dashboard/team",
       icon: Users,
       userTypes: ["lgu", "suc", "hei", "government"],
-      disabled: true,
+      // Enabled only once the user is actually linked to an organization —
+      // truer than the user_type list alone, and the page then has real data.
+      disabled: !organizationId,
     },
     {
       title: "Analytics",
