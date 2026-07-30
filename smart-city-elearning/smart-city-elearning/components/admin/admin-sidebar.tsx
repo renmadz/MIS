@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Home, Users, BookOpen, BarChart3, ClipboardCheck, FolderInput } from "lucide-react"
+import { Home, Users, BookOpen, BarChart3, ClipboardCheck, FolderInput, Calendar } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
@@ -13,31 +13,37 @@ export function AdminSidebar() {
   const [pendingCount, setPendingCount] = useState<number | null>(null)
   const [userCount, setUserCount] = useState<number | null>(null)
   const [courseCount, setCourseCount] = useState<number | null>(null)
+  const [eventCount, setEventCount] = useState<number | null>(null)
 
   // Real counts for nav badges. head+count avoids fetching rows.
   useEffect(() => {
     const load = async () => {
-      const [pending, users, courses] = await Promise.all([
+      const [pending, users, courses, events] = await Promise.all([
         supabaseBrowser.from("modules").select("id", { count: "exact", head: true }).eq("status", "pending_review"),
         supabaseBrowser.from("users").select("id", { count: "exact", head: true }),
         supabaseBrowser.from("courses").select("id", { count: "exact", head: true }),
+        supabaseBrowser.from("events").select("id", { count: "exact", head: true })
+          .eq("is_published", true).gte("starts_at", new Date().toISOString()),
       ])
       setPendingCount(pending.count ?? 0)
       setUserCount(users.count ?? null)
       setCourseCount(courses.count ?? null)
+      setEventCount(events.count ?? null)
     }
     load()
   }, [])
 
   // Only nav items whose route actually exists. Dead links (Certificates,
-  // Organizations, Regional Data, Events, Content, Messages, System Settings,
+  // Organizations, Regional Data, Content, Messages, System Settings,
   // Security) were removed rather than left pointing at non-existent pages.
+  // Events was restored in 016, now backed by a real table and page.
   const menuItems = [
     { title: "Dashboard", href: "/admin", icon: Home },
     { title: "User Management", href: "/admin/users", icon: Users, badge: userCount != null ? userCount.toLocaleString() : undefined },
     { title: "Course Management", href: "/admin/courses", icon: BookOpen, badge: courseCount != null ? courseCount.toLocaleString() : undefined },
     { title: "Content Review", href: "/admin/review", icon: ClipboardCheck, badge: pendingCount != null && pendingCount > 0 ? String(pendingCount) : undefined },
     { title: "Assign Modules", href: "/admin/assign", icon: FolderInput },
+    { title: "Events", href: "/admin/events", icon: Calendar, badge: eventCount ? String(eventCount) : undefined },
     { title: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   ]
 

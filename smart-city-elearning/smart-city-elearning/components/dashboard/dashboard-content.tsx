@@ -7,7 +7,10 @@ import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { BookOpen, Award, Clock, TrendingUp, Users, Target, Calendar, Play, Building2 } from "lucide-react"
 import Link from "next/link"
-import type { User, Course } from "@/lib/types/database"
+import type { User, Course, Event } from "@/lib/types/database"
+import { EVENT_TYPE_LABEL, eventDate, eventTime } from "@/lib/events/format"
+
+type UpcomingEvent = Pick<Event, "id" | "title" | "event_type" | "starts_at" | "ends_at" | "location">
 
 interface LearningPathProgress {
   id: string;
@@ -26,6 +29,7 @@ interface DashboardContentProps {
   completedCount?: number
   certificates?: { issued_at: string }[]
   learningPath?: LearningPathProgress | null
+  upcomingEvents?: UpcomingEvent[]
 }
 
 export function DashboardContent({
@@ -35,15 +39,10 @@ export function DashboardContent({
   activeCount = 0,
   completedCount = 0,
   certificates = [],
-  learningPath = null
+  learningPath = null,
+  upcomingEvents = []
 }: DashboardContentProps) {
   const [isLoading] = useState(false)
-
-  const upcomingEvents = [
-    { title: "Smart Cities Webinar", date: "Dec 15, 2024", time: "2:00 PM", type: "Live Session" },
-    { title: "IoT Workshop", date: "Dec 18, 2024", time: "10:00 AM", type: "Hands-on" },
-    { title: "Regional Conference", date: "Dec 22, 2024", time: "9:00 AM", type: "Conference" },
-  ]
 
   if (isLoading) {
     return <div className="space-y-6">Loading dashboard...</div>
@@ -219,25 +218,31 @@ export function DashboardContent({
                 <Calendar className="w-5 h-5" />
                 Upcoming Events
               </CardTitle>
-              <CardDescription>[Placeholder: No event data available yet]</CardDescription>
+              <CardDescription>Webinars, workshops, and conferences</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {upcomingEvents.map((event, index) => (
-                <div key={index} className="flex items-start gap-3 p-3 border rounded-lg">
-                  <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
-                  <div className="flex-1">
-                    <h4 className="font-medium text-sm">{event.title}</h4>
-                    <p className="text-xs text-muted-foreground">
-                      {event.date} at {event.time}
-                    </p>
-                    <Badge variant="outline" className="text-xs mt-1">
-                      {event.type}
-                    </Badge>
+              {upcomingEvents.length === 0 ? (
+                <p className="py-4 text-center text-sm text-muted-foreground">
+                  No upcoming events scheduled.
+                </p>
+              ) : (
+                upcomingEvents.map((event) => (
+                  <div key={event.id} className="flex items-start gap-3 p-3 border rounded-lg">
+                    <div className="w-2 h-2 bg-primary rounded-full mt-2"></div>
+                    <div className="flex-1">
+                      <h4 className="font-medium text-sm">{event.title}</h4>
+                      <p className="text-xs text-muted-foreground">
+                        {eventDate(event.starts_at)} at {eventTime(event.starts_at, event.ends_at)}
+                      </p>
+                      <Badge variant="outline" className="text-xs mt-1">
+                        {EVENT_TYPE_LABEL[event.event_type]}
+                      </Badge>
+                    </div>
                   </div>
-                </div>
-              ))}
-              <Button variant="outline" size="sm" className="w-full bg-transparent">
-                View All Events
+                ))
+              )}
+              <Button variant="outline" size="sm" className="w-full bg-transparent" asChild>
+                <Link href="/events">View All Events</Link>
               </Button>
             </CardContent>
           </Card>

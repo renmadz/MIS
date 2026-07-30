@@ -17,6 +17,20 @@ export interface User {
   status?: "pending" | "active" | "inactive";
 }
 
+export interface Event {
+  id: string
+  title: string
+  description: string
+  event_type: "live_session" | "hands_on" | "conference"
+  starts_at: string
+  ends_at?: string | null
+  location?: string | null
+  is_published: boolean
+  created_by?: string | null
+  created_at: string
+  updated_at: string
+}
+
 export interface Course {
   id: string
   title: string

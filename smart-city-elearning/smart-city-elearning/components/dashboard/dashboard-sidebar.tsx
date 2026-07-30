@@ -116,10 +116,10 @@ export function DashboardSidebar() {
       disabled: true,
     },
     {
-      title: "Schedule",
-      href: "/dashboard/schedule",
+      title: "Events",
+      href: "/events",
       icon: Calendar,
-      disabled: true,
+      disabled: false,
     },
   ]
 
