@@ -21,27 +21,43 @@ export async function GET(request: Request) {
     }
   );
 
+  // Only the columns the course card renders, plus modules(id) purely for the
+  // "N modules" count (via .length). Previously this pulled every module's
+  // title+description+more — ~3x the payload for data the catalog never shows.
   let query = supabase
     .from("courses")
     .select(`
-      *,
-      modules!course_id (
-        id,
-        course_id,
-        title,
-        description,
-        order,
-        estimated_duration,
-        is_required
-      )
+      id,
+      title,
+      description,
+      level,
+      category,
+      duration,
+      thumbnail,
+      rating,
+      enrollment_count,
+      target_audience,
+      instructor,
+      modules!course_id ( id )
     `)
     .eq("is_active", true);
 
   if (level) query = query.eq("level", level);
   if (category) query = query.eq("category", category);
   if (target_audience) {
-    const audienceArray = JSON.parse(target_audience) as string[];
-    query = query.contains("target_audience", audienceArray);
+    // target_audience arrives as a JSON-encoded string array. Guard the parse so
+    // malformed input is a clean 400, not an unhandled 500. Also require an
+    // actual array of strings.
+    let audienceArray: unknown;
+    try {
+      audienceArray = JSON.parse(target_audience);
+    } catch {
+      return NextResponse.json({ error: "Invalid target_audience parameter" }, { status: 400 });
+    }
+    if (!Array.isArray(audienceArray) || !audienceArray.every((a) => typeof a === "string")) {
+      return NextResponse.json({ error: "Invalid target_audience parameter" }, { status: 400 });
+    }
+    query = query.contains("target_audience", audienceArray as string[]);
   }
   if (durationMin !== undefined) query = query.gte("duration", durationMin * 60);
   if (durationMax !== undefined) query = query.lte("duration", durationMax * 60);

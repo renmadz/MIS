@@ -83,6 +83,54 @@ middleware.ts     Auth session refresh and route protection
 - **Learner** — Enroll, track progress, earn certificates
 - **Admin** — `users.is_admin = true`; access `/admin` routes
 
+## Registration & email confirmation
+
+Registration behavior depends on the Supabase Auth **Confirm email** toggle
+(Authentication > Settings > Email Auth):
+
+- **Confirm email OFF** (current configuration): `signUp()` returns a live
+  session immediately. The app inserts the user's `public.users` profile row in
+  the same step and redirects to `/login`. Registration is usable right away.
+- **Confirm email ON**: `signUp()` returns a user but **no session** until the
+  user clicks the confirmation link in their email. The registration form
+  detects this and shows a "check your email to confirm your account" message
+  instead of an error.
+
+> **Important if you enable Confirm email:** the profile row in `public.users` is
+> currently created inline during registration, which requires the immediate
+> session that only exists when confirmation is OFF. With confirmation ON, that
+> insert is intentionally skipped, so a confirmed user would have an `auth.users`
+> record but **no `public.users` profile** — and the app's login/dashboard flow
+> depends on that profile existing. Turning confirmation ON therefore also
+> requires moving profile creation to a post-confirmation step (a database
+> trigger on `auth.users`, or an auth-callback route) before the flow works
+> end to end. See the `handle_new_user()` stub in `001_initial_schema.sql`.
+
+## Content Workflow
+
+Courses are produced through a review-gated pipeline:
+
+1. **Admin creates the course shell** — title, category, description, and other
+   course-level metadata — and **assigns an instructor** to it.
+2. **Instructor uploads content** — modules and their materials (PDFs to the
+   private `course-materials` bucket, lesson structure, etc.) for the assigned
+   course.
+3. **Admin reviews and approves** the submitted modules before the course is
+   published. Nothing an instructor uploads goes live to learners until an admin
+   approves it.
+
+### Prerequisites
+
+- A course's prerequisites are matched **live** against other courses by
+  **case-insensitive exact course-title** comparison — there are no stored
+  course-to-course links; the relationship is resolved at check time from the
+  current catalog.
+- Prerequisites are **hard-blocked**: a learner cannot enroll in a course until
+  its prerequisite course(s) are satisfied.
+- **Already-issued certificates are never revoked retroactively.** If a course
+  later gains a new prerequisite, learners who already completed and were issued
+  a certificate keep it — the new prerequisite only affects future enrollments.
+
 ## Protected routes
 
 Middleware requires authentication for:

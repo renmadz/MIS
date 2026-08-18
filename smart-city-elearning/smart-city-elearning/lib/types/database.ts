@@ -4,6 +4,7 @@ export interface User {
   name: string
   user_type: "individual" | "lgu" | "suc" | "hei" | "dost" | "government"
   organization?: string
+  organization_id?: string | null
   position?: string
   region: string
   province?: string
@@ -12,7 +13,22 @@ export interface User {
   created_at: string
   updated_at: string
   is_admin?: boolean;
+  is_instructor?: boolean;
   status?: "pending" | "active" | "inactive";
+}
+
+export interface Event {
+  id: string
+  title: string
+  description: string
+  event_type: "live_session" | "hands_on" | "conference"
+  starts_at: string
+  ends_at?: string | null
+  location?: string | null
+  is_published: boolean
+  created_by?: string | null
+  created_at: string
+  updated_at: string
 }
 
 export interface Course {
@@ -26,6 +42,7 @@ export interface Course {
   prerequisites: string[] | null
   thumbnail: string
   instructor: string
+  instructor_id?: string | null
   rating: number | null
   enrollment_count: number | null
   is_active: boolean

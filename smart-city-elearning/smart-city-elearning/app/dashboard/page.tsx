@@ -3,7 +3,7 @@ import { DashboardSidebar } from "@/components/dashboard/dashboard-sidebar";
 import { DashboardContent } from "@/components/dashboard/dashboard-content";
 import { supabaseServer } from "@/lib/supabase/server-client";
 import { Loader2 } from "lucide-react";
-import type { User, Course, Enrollment, Certificate } from "@/lib/types/database";
+import type { User, Course, Enrollment, Certificate, Event } from "@/lib/types/database";
 
 interface LearningPathProgress {
   id: string;
@@ -33,6 +33,8 @@ export default async function DashboardPage() {
   let stats = { coursesEnrolled: 0, certificatesEarned: 0, learningHours: 0, progressScore: 0 };
   let recentCourses: Partial<Course & { progress: number; nextLesson: string; timeLeft: string; image: string; completed_at?: string }>[] = [];
   let learningPath: LearningPathProgress | null = null;
+  type UpcomingEvent = Pick<Event, "id" | "title" | "event_type" | "starts_at" | "ends_at" | "location">;
+  let upcomingEvents: UpcomingEvent[] = [];
 
   if (authUser?.email) {
     const { data: userData, error: userError } = await client
@@ -148,6 +150,19 @@ export default async function DashboardPage() {
       }
     }
 
+    // Upcoming events — platform-wide announcements, soonest three. Not
+    // user-specific, but fetched here so the widget follows the same
+    // server-fetch-then-prop pattern as everything else on this page.
+    const { data: eventsData, error: eventsError } = await client
+      .from("events")
+      .select("id,title,event_type,starts_at,ends_at,location")
+      .eq("is_published", true)
+      .gte("starts_at", new Date().toISOString())
+      .order("starts_at", { ascending: true })
+      .limit(3);
+    if (eventsError) console.error("Events query error:", eventsError);
+    upcomingEvents = (eventsData ?? []) as UpcomingEvent[];
+
     if (enrollments && enrollments.length > 0) {
       const activeEnrollments = enrollments.filter((e: Enrollment & { course?: Course | null }) => ["active", "completed"].includes(e.status));
       const activeCount = enrollments.filter((e: Enrollment & { course?: Course | null }) => e.status === "active").length;
@@ -247,6 +262,7 @@ export default async function DashboardPage() {
                 completedCount={completedCount}
                 certificates={safeCertificates}
                 learningPath={learningPath}
+                upcomingEvents={upcomingEvents}
               />
             </main>
           </div>
@@ -265,6 +281,7 @@ export default async function DashboardPage() {
               stats={stats}
               recentCourses={recentCourses}
               learningPath={learningPath}
+              upcomingEvents={upcomingEvents}
             />
           </main>
         </div>

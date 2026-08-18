@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Eye, EyeOff, Mail, Lock, Building2 } from "lucide-react"
+import Link from "next/link"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
 import { getUserByEmail } from "@/lib/database/client-queries"
 
@@ -44,12 +45,15 @@ export function LoginForm() {
 
       const dbUser = await getUserByEmail(formData.email)
       if (!dbUser) {
+        // Sign-in already created a session; discard it so the failure is real
+        await supabaseBrowser.auth.signOut()
         setError("User not found in database")
         return
       }
 
       // Normalize comparison to avoid case sensitivity
       if (formData.userType.trim().toLowerCase() !== dbUser.user_type.trim().toLowerCase()) {
+        await supabaseBrowser.auth.signOut()
         setError("User type doesn't match your account")
         return
       }
@@ -60,6 +64,8 @@ export function LoginForm() {
       window.location.href = "/dashboard"
       
     } catch (err: any) {
+      // Sign-in may have succeeded before the throw; never leave a session behind
+      await supabaseBrowser.auth.signOut().catch(() => {})
       setError("Login failed. Please try again.")
     } finally {
       setIsLoading(false)
@@ -140,8 +146,8 @@ export function LoginForm() {
       </Button>
 
       <div className="text-center">
-        <Button variant="link" className="text-sm text-muted-foreground">
-          Forgot your password?
+        <Button variant="link" className="text-sm text-muted-foreground" asChild>
+          <Link href="/forgot-password">Forgot your password?</Link>
         </Button>
       </div>
     </form>

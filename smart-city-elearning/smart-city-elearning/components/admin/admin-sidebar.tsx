@@ -1,95 +1,54 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import {
-  Home,
-  Users,
-  BookOpen,
-  Award,
-  BarChart3,
-  Settings,
-  FileText,
-  Shield,
-  Building2,
-  MapPin,
-  Calendar,
-  MessageSquare,
-} from "lucide-react"
+import { Home, Users, BookOpen, BarChart3, ClipboardCheck, FolderInput, Calendar, Target } from "lucide-react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { supabaseBrowser } from "@/lib/supabase/browser-client"
 
 export function AdminSidebar() {
   const pathname = usePathname()
+  const [pendingCount, setPendingCount] = useState<number | null>(null)
+  const [userCount, setUserCount] = useState<number | null>(null)
+  const [courseCount, setCourseCount] = useState<number | null>(null)
+  const [eventCount, setEventCount] = useState<number | null>(null)
+  const [pathCount, setPathCount] = useState<number | null>(null)
 
+  // Real counts for nav badges. head+count avoids fetching rows.
+  useEffect(() => {
+    const load = async () => {
+      const [pending, users, courses, events, paths] = await Promise.all([
+        supabaseBrowser.from("modules").select("id", { count: "exact", head: true }).eq("status", "pending_review"),
+        supabaseBrowser.from("users").select("id", { count: "exact", head: true }),
+        supabaseBrowser.from("courses").select("id", { count: "exact", head: true }),
+        supabaseBrowser.from("events").select("id", { count: "exact", head: true })
+          .eq("is_published", true).gte("starts_at", new Date().toISOString()),
+        supabaseBrowser.from("learningpaths").select("id", { count: "exact", head: true }).eq("status", "active"),
+      ])
+      setPendingCount(pending.count ?? 0)
+      setUserCount(users.count ?? null)
+      setCourseCount(courses.count ?? null)
+      setEventCount(events.count ?? null)
+      setPathCount(paths.count ?? null)
+    }
+    load()
+  }, [])
+
+  // Only nav items whose route actually exists. Dead links (Certificates,
+  // Organizations, Regional Data, Content, Messages, System Settings,
+  // Security) were removed rather than left pointing at non-existent pages.
+  // Events was restored in 016, now backed by a real table and page.
   const menuItems = [
-    {
-      title: "Dashboard",
-      href: "/admin",
-      icon: Home,
-    },
-    {
-      title: "User Management",
-      href: "/admin/users",
-      icon: Users,
-      badge: "1,247",
-    },
-    {
-      title: "Course Management",
-      href: "/admin/courses",
-      icon: BookOpen,
-      badge: "24",
-    },
-    {
-      title: "Certificates",
-      href: "/admin/certificates",
-      icon: Award,
-      badge: "892",
-    },
-    {
-      title: "Analytics",
-      href: "/admin/analytics",
-      icon: BarChart3,
-    },
-    {
-      title: "Organizations",
-      href: "/admin/organizations",
-      icon: Building2,
-    },
-    {
-      title: "Regional Data",
-      href: "/admin/regional",
-      icon: MapPin,
-    },
-    {
-      title: "Events",
-      href: "/admin/events",
-      icon: Calendar,
-    },
-    {
-      title: "Content",
-      href: "/admin/content",
-      icon: FileText,
-    },
-    {
-      title: "Messages",
-      href: "/admin/messages",
-      icon: MessageSquare,
-      badge: "12",
-    },
-  ]
-
-  const systemItems = [
-    {
-      title: "System Settings",
-      href: "/admin/settings",
-      icon: Settings,
-    },
-    {
-      title: "Security",
-      href: "/admin/security",
-      icon: Shield,
-    },
+    { title: "Dashboard", href: "/admin", icon: Home },
+    { title: "User Management", href: "/admin/users", icon: Users, badge: userCount != null ? userCount.toLocaleString() : undefined },
+    { title: "Course Management", href: "/admin/courses", icon: BookOpen, badge: courseCount != null ? courseCount.toLocaleString() : undefined },
+    { title: "Content Review", href: "/admin/review", icon: ClipboardCheck, badge: pendingCount != null && pendingCount > 0 ? String(pendingCount) : undefined },
+    { title: "Assign Modules", href: "/admin/assign", icon: FolderInput },
+    { title: "Events", href: "/admin/events", icon: Calendar, badge: eventCount ? String(eventCount) : undefined },
+    { title: "Learning Paths", href: "/admin/learning-paths", icon: Target, badge: pathCount ? String(pathCount) : undefined },
+    { title: "Analytics", href: "/admin/analytics", icon: BarChart3 },
   ]
 
   return (
@@ -118,28 +77,6 @@ export function AdminSidebar() {
             )
           })}
         </nav>
-
-        <div className="mt-8">
-          <h4 className="text-sm font-medium text-muted-foreground mb-2 px-3">System</h4>
-          <nav className="space-y-2">
-            {systemItems.map((item) => {
-              const isActive = pathname === item.href
-              return (
-                <Button
-                  key={item.href}
-                  variant={isActive ? "secondary" : "ghost"}
-                  className="w-full justify-start gap-3"
-                  asChild
-                >
-                  <Link href={item.href} prefetch={false}>
-                    <item.icon className="w-4 h-4" />
-                    {item.title}
-                  </Link>
-                </Button>
-              )
-            })}
-          </nav>
-        </div>
       </div>
     </aside>
   )

@@ -10,7 +10,7 @@ import { Checkbox } from "@/components/ui/checkbox"
 import { Eye, EyeOff, Mail, Lock, User, Building2, MapPin, CheckCircle, AlertCircle } from "lucide-react"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
-import { getUserByEmail } from "@/lib/database/client-queries"
+import { OrganizationPicker } from "@/components/organizations/organization-picker"
 
 // Hardcoded provinces and cities for Region 2
 const region2Locations = {
@@ -132,6 +132,7 @@ export function RegisterForm() {
     confirmPassword: "",
     userType: "",
     organization: "",
+    organizationId: null as string | null,
     position: "",
     province: "", // Renamed from location to match database
     city: "",
@@ -139,18 +140,20 @@ export function RegisterForm() {
   })
 
   // Auto-populate organization for LGU users when city is selected
+  // For LGU users, auto-populate organization from the selected city + province.
+  // Non-LGU users type their own organization; switching user type or province is
+  // handled by those Select onValueChange handlers (which clear the LGU-only
+  // fields), so this effect must NOT reset organization for non-LGU users —
+  // doing so wiped a manually-entered organization whenever province changed.
   useEffect(() => {
     if (formData.userType === "lgu" && formData.city && formData.province) {
       const formattedProvince = formData.province.charAt(0).toUpperCase() + formData.province.slice(1)
       setFormData((prev) => ({
         ...prev,
-        organization: `LGU ${formData.city}, ${formattedProvince}`
-      }))
-    } else if (formData.userType !== "lgu") {
-      setFormData((prev) => ({
-        ...prev,
-        organization: "",
-        city: ""
+        organization: `LGU ${formData.city}, ${formattedProvince}`,
+        // The derived name is still resolved against the registry by the
+        // picker's exact-match rule; it only links if an entry matches exactly.
+        organizationId: null,
       }))
     }
   }, [formData.userType, formData.city, formData.province])
@@ -182,15 +185,9 @@ export function RegisterForm() {
     }
 
     try {
-      // Check if user already exists
-      const existingUser = await getUserByEmail(formData.email)
-      if (existingUser) {
-        setMessage({ type: "error", text: "An account with this email already exists" })
-        setIsLoading(false)
-        return
-      }
-
-      // Sign up user with Supabase auth
+      // Sign up user with Supabase auth. A duplicate email is surfaced by
+      // signUp()'s own error below (the previous anon pre-check could not read
+      // the users table under RLS, so it was removed).
       const { data: authData, error: authError } = await supabaseBrowser.auth.signUp({
         email: formData.email,
         password: formData.password,
@@ -211,10 +208,15 @@ export function RegisterForm() {
         return
       }
 
-      // Ensure session is active
-      const { data: { session } } = await supabaseBrowser.auth.getSession()
-      if (!session) {
-        setMessage({ type: "error", text: "Authentication session not established. Please try again." })
+      // If email confirmation is enabled in Supabase Auth, signUp() returns a
+      // user but NO session until the user confirms via the emailed link. That
+      // is a success, not an error — guide them to their inbox. The profile row
+      // is inserted below only when a session exists (confirmation off).
+      if (!authData.session) {
+        setMessage({
+          type: "success",
+          text: "Account created. Please check your email to confirm your account, then sign in.",
+        })
         setIsLoading(false)
         return
       }
@@ -225,7 +227,10 @@ export function RegisterForm() {
         email: formData.email,
         name: `${formData.firstName} ${formData.lastName}`,
         user_type: formData.userType as "individual" | "lgu" | "suc" | "hei" | "dost" | "government",
-        organization: formData.organization,
+        // Trimmed so the stored free text matches what the picker and the
+        // migration backfill both treat as an exact name.
+        organization: formData.organization.trim(),
+        organization_id: formData.organizationId,
         position: formData.position,
         region: "Region 2",
         province: formData.province,
@@ -251,6 +256,7 @@ export function RegisterForm() {
         confirmPassword: "",
         userType: "",
         organization: "",
+        organizationId: null,
         position: "",
         province: "",
         city: "",
@@ -327,7 +333,7 @@ export function RegisterForm() {
 
       <div className="space-y-2">
         <Label htmlFor="userType">Organization Type</Label>
-        <Select value={formData.userType} onValueChange={(value) => setFormData({ ...formData, userType: value, province: "", city: "", organization: "" })}>
+        <Select value={formData.userType} onValueChange={(value) => setFormData({ ...formData, userType: value, province: "", city: "", organization: "", organizationId: null })}>
           <SelectTrigger>
             <Building2 className="w-4 h-4 mr-2" />
             <SelectValue placeholder="Select your organization type" />
@@ -345,11 +351,12 @@ export function RegisterForm() {
 
       <div className="space-y-2">
         <Label htmlFor="organization">Organization/Institution Name</Label>
-        <Input
-          id="organization"
-          placeholder="Enter your organization name"
+        <OrganizationPicker
           value={formData.organization}
-          onChange={(e) => formData.userType !== "lgu" && setFormData({ ...formData, organization: e.target.value })}
+          organizationId={formData.organizationId}
+          onChange={({ organization, organization_id }) =>
+            setFormData((prev) => ({ ...prev, organization, organizationId: organization_id }))
+          }
           disabled={formData.userType === "lgu"}
           required
         />
@@ -372,7 +379,7 @@ export function RegisterForm() {
           <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
           <Select
             value={formData.province}
-            onValueChange={(value) => setFormData({ ...formData, province: value, city: "", organization: formData.userType === "lgu" ? "" : formData.organization })}
+            onValueChange={(value) => setFormData({ ...formData, province: value, city: "", organization: formData.userType === "lgu" ? "" : formData.organization, organizationId: formData.userType === "lgu" ? null : formData.organizationId })}
           >
             <SelectTrigger className="pl-10">
               <SelectValue placeholder="Select your province" />

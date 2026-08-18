@@ -1,58 +1,45 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
-import { supabaseBrowser } from '@/lib/supabase/browser-client';
+import { useEffect } from 'react';
+import { useUser } from '@/components/providers/user-provider';
 
+/**
+ * Soft client-side gate for admin pages. Reads the shared user context instead of
+ * running its own getUser()+users select. Middleware remains the authoritative
+ * server-side gate; this only controls what the client renders.
+ *
+ * Three-way: loading -> spinner; error (network) -> retry, NO redirect (a hang is
+ * not a deauth); ready && !admin -> redirect; ready && admin -> children.
+ */
 export function AdminGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { profile, loading, error, retry } = useUser();
 
   useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        setIsLoading(true);
-        const { data: { user }, error: authError } = await supabaseBrowser.auth.getUser();
-        if (authError) throw new Error(authError.message);
-        if (!user) {
-          router.push('/dashboard');
-          return;
-        }
+    if (loading || error) return; // never redirect while loading or on a network error
+    if (!profile?.is_admin) router.push('/dashboard');
+  }, [loading, error, profile, router]);
 
-        // Query public.users for is_admin
-        const { data, error: profileError } = await supabaseBrowser
-          .from('users')
-          .select('is_admin')
-          .eq('id', user.id)
-          .single();
-
-        if (profileError) {
-          console.error('Profile fetch error:', profileError.message);
-          throw new Error('Failed to fetch user profile');
-        }
-        if (!data?.is_admin) {
-          router.push('/dashboard');
-          return;
-        }
-      } catch (err: any) {
-        setError(err.message || 'Failed to authenticate user');
-        console.error('Auth error:', err);
-        router.push('/dashboard');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    fetchUser();
-  }, [router]);
-
-  if (isLoading) {
+  if (loading) {
     return <div className="text-center p-6">Loading...</div>;
   }
-
   if (error) {
-    return <div className="text-center p-6 text-red-600">{error}</div>;
+    return (
+      <div className="text-center p-6 space-y-3">
+        <p className="text-destructive">Connection issue — couldn&apos;t reach the server.</p>
+        <button
+          type="button"
+          onClick={retry}
+          className="rounded border px-3 py-1 text-sm font-medium hover:bg-muted"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+  if (!profile?.is_admin) {
+    return <div className="text-center p-6">Loading...</div>; // redirect in flight
   }
 
   return <>{children}</>;

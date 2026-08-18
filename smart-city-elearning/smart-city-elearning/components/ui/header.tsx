@@ -5,7 +5,7 @@ import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Badge } from "@/components/ui/badge"
-import { BookOpenText, Bell, Settings, LogOut } from "lucide-react"
+import { BookOpenText, Settings, LogOut, Shield, GraduationCap } from "lucide-react"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,47 +16,32 @@ import {
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
-import { getUserByEmail } from "@/lib/database/client-queries"
-import type { User } from "@/lib/types/database"
+import { useUser } from "@/components/providers/user-provider"
+import { NotificationBell } from "@/components/notifications/notification-bell"
 
 export function Header() {
   const router = useRouter()
   const pathname = usePathname()
-  const [user, setUser] = useState<User | null>(null)
+  const { profile: user, loading: isLoading, error: userError, retry } = useUser()
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
 
+  // Avatar signed URL follows the shared profile's avatar path. The profile
+  // itself comes from the shared context (no per-header getUser()).
   useEffect(() => {
-    const fetchUser = async () => {
-      setIsLoading(true)
-      try {
-        const { data: { user: authUser } } = await supabaseBrowser.auth.getUser()
-        if (authUser?.email) {
-          const userData = await getUserByEmail(authUser.email)
-          setUser(userData)
-          if (userData?.avatar) {
-            const { data, error } = await supabaseBrowser.storage
-              .from("avatars")
-              .createSignedUrl(userData.avatar, 3600) // 1 hour expiration
-            if (error) {
-              setAvatarUrl(null)
-            } else {
-              setAvatarUrl(data.signedUrl)
-            }
-          }
-        } else {
-          setUser(null)
-          setAvatarUrl(null)
-        }
-      } catch (err) {
-        setUser(null)
+    let cancelled = false
+    const loadAvatar = async () => {
+      if (!user?.avatar) {
         setAvatarUrl(null)
-      } finally {
-        setIsLoading(false)
+        return
       }
+      const { data, error } = await supabaseBrowser.storage
+        .from("avatars")
+        .createSignedUrl(user.avatar, 3600) // 1 hour expiration
+      if (!cancelled) setAvatarUrl(error ? null : data.signedUrl)
     }
-    fetchUser()
-  }, [])
+    loadAvatar()
+    return () => { cancelled = true }
+  }, [user?.avatar])
 
   const handleLogout = async () => {
     try {
@@ -89,6 +74,10 @@ export function Header() {
             <div className="flex items-center gap-3">
               <Button variant="outline" disabled>Loading...</Button>
             </div>
+          ) : userError ? (
+            <div className="flex items-center gap-3">
+              <Button variant="outline" size="sm" onClick={retry}>Retry</Button>
+            </div>
           ) : user ? (
             <div className="flex items-center gap-4 cursor-pointer">
               {!pathname?.startsWith('/dashboard') && !pathname?.startsWith('/certificates') && (
@@ -96,10 +85,8 @@ export function Header() {
                   Dashboard
                 </Button>
               )}
-              <Button variant="ghost" size="sm" className="relative">
-                <Bell className="w-4 h-4" />
-                <span className="absolute -top-1 -right-1 w-2 h-2 bg-destructive rounded-full"></span>
-              </Button>
+
+              <NotificationBell />
 
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -127,6 +114,25 @@ export function Header() {
                       Profile Settings
                     </Link>
                   </DropdownMenuItem>
+                  {/* Discovery links for the privileged areas — the only way in
+                      until a role-aware nav exists. Both can show at once. */}
+                  {(user.is_admin || user.is_instructor) && <DropdownMenuSeparator />}
+                  {user.is_admin && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/admin" className="cursor-pointer">
+                        <Shield className="mr-2 h-4 w-4" />
+                        Admin Panel
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
+                  {user.is_instructor && (
+                    <DropdownMenuItem asChild>
+                      <Link href="/instructor" className="cursor-pointer">
+                        <GraduationCap className="mr-2 h-4 w-4" />
+                        Instructor Panel
+                      </Link>
+                    </DropdownMenuItem>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem className="cursor-pointer" onClick={handleLogout}>
                     <LogOut className="mr-2 h-4 w-4" />

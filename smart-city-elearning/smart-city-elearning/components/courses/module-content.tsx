@@ -8,7 +8,16 @@ import { Badge } from "@/components/ui/badge"
 import { Loader2, CheckCircle, Book, AlertCircle } from "lucide-react"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
 import type { Module, Lesson, Resource } from "@/lib/types/database"
+import dynamic from "next/dynamic"
 import Confetti from "react-confetti"
+
+// react-pdf (pdfjs) touches browser-only APIs (DOMMatrix) at import time, which
+// crashes server rendering. Load the viewer client-only so it never runs on the
+// server; the PDF is rendered in the browser regardless.
+const PdfViewer = dynamic(
+  () => import("@/components/courses/pdf-viewer").then((m) => m.PdfViewer),
+  { ssr: false }
+)
 
 // Minimal interface for module query result
 interface ModuleQueryResult {
@@ -273,8 +282,13 @@ export function ModuleContent({ courseId, moduleId }: { courseId: string; module
             })
 
             if (!issueResponse.ok) {
-              const issueError = await issueResponse.json()
-              throw new Error(issueError.error || "Failed to issue certificate")
+              // The lesson itself was already marked complete; only certificate
+              // issuance failed. Surface the API's specific reason (e.g. "no lesson
+              // content yet") instead of the generic mark-complete alert below.
+              const issueError = await issueResponse.json().catch(() => ({}))
+              alert(issueError.error || "Failed to issue certificate")
+              router.push(`/courses/${courseId}`)
+              return
             }
 
             setShowConfetti(true)
@@ -364,18 +378,7 @@ export function ModuleContent({ courseId, moduleId }: { courseId: string; module
             )}
           </CardHeader>
           <CardContent>
-            <div style={{ width: '100%', height: '600px' }}>
-              <iframe
-                src={`https://docs.google.com/viewer?url=${encodeURIComponent(pdfUrl)}&embedded=true`}
-                width="100%"
-                height="100%"
-                style={{ border: 'none' }}
-                title="PDF Viewer"
-                onError={() => {
-                  setError("Failed to load PDF in Google Docs Viewer")
-                }}
-              />
-            </div>
+            <PdfViewer url={pdfUrl} initialPage={lessons[0]?.start_page || 1} />
           </CardContent>
         </Card>
       </div>

@@ -8,6 +8,7 @@ import { Clock, BookOpen, Award, ArrowRight, Building2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { supabaseBrowser } from "@/lib/supabase/browser-client"
 import type { LearningPath } from "@/lib/types/database"
+import { getBoolSetting, PLACEHOLDER_LEARNING_PATHS_KEY } from "@/lib/settings/app-settings"
 import Link from "next/link"
 
 interface CourseInPath {
@@ -96,7 +97,16 @@ export function LearningPathsDashboard() {
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true)
+      // Admin-controlled: are the built-in placeholder tracks shown at all?
+      // Declared out here so the catch block can still use it, and defaulted to
+      // the current behaviour so a transient failure never silently changes
+      // what users see.
+      let placeholders: LearningPathWithProgress[] = mockLearningPaths
       try {
+        placeholders = (await getBoolSetting(PLACEHOLDER_LEARNING_PATHS_KEY, true))
+          ? mockLearningPaths
+          : []
+
         const { data: { user } } = await supabaseBrowser.auth.getUser()
         let userData: UserData = { name: null, user_type: null, organization: null }
 
@@ -142,7 +152,7 @@ export function LearningPathsDashboard() {
 
         if (pathsError) {
           setError(pathsError.message)
-          setLearningPaths(mockLearningPaths)
+          setLearningPaths(placeholders)
           return
         }
 
@@ -188,11 +198,11 @@ export function LearningPathsDashboard() {
           }
         })
 
-        // Combine database paths with mock paths
-        setLearningPaths([...processedPaths, ...mockLearningPaths])
+        // Combine database paths with the placeholder tracks (if still enabled)
+        setLearningPaths([...processedPaths, ...placeholders])
       } catch (err: any) {
         setError(err.message || "Failed to load learning paths")
-        setLearningPaths(mockLearningPaths)
+        setLearningPaths(placeholders)
       } finally {
         setIsLoading(false)
       }

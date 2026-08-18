@@ -1,17 +1,10 @@
 import { supabaseServer } from '@/lib/supabase/server-client'
-import type { User, Course, Enrollment, Certificate, Organization } from '@/lib/types/database'
+import type { User, Enrollment, Certificate } from '@/lib/types/database'
+
+// NOTE: the app's live getUserByEmail comes from lib/database/client-queries.ts
+// (browser client), not this module. The server-side one below is separate.
 
 // User queries
-export async function getUserById(id: string): Promise<User | null> {
-  const supabase = await supabaseServer()
-  const { data, error } = await supabase.from('users').select('*').eq('id', id).single()
-  if (error) {
-    console.error('Error fetching user:', error)
-    return null
-  }
-  return data
-}
-
 export async function getUserByEmail(email: string): Promise<User | null> {
   const supabase = await supabaseServer()
   const { data, error } = await supabase.from('users').select('*').eq('email', email).single()
@@ -37,47 +30,6 @@ export async function getUsersByType(userType: string): Promise<User[]> {
   const { data, error } = await supabase.from('users').select('*').eq('user_type', userType)
   if (error) {
     console.error('Error fetching users by type:', error)
-    return []
-  }
-  return data || []
-}
-
-// Course queries (similar updates for all other functions)
-export async function getAllCourses(): Promise<Course[]> {
-  const supabase = await supabaseServer()
-  const { data, error } = await supabase.from('courses').select('*')
-  if (error) {
-    console.error('Error fetching courses:', error)
-    return []
-  }
-  return data || []
-}
-
-export async function getCourseById(id: string): Promise<Course | null> {
-  const supabase = await supabaseServer()
-  const { data, error } = await supabase.from('courses').select('*').eq('id', id).single()
-  if (error) {
-    console.error('Error fetching course:', error)
-    return null
-  }
-  return data
-}
-
-export async function getCoursesByCategory(category: string): Promise<Course[]> {
-  const supabase = await supabaseServer()
-  const { data, error } = await supabase.from('courses').select('*').eq('category', category)
-  if (error) {
-    console.error('Error fetching courses by category:', error)
-    return []
-  }
-  return data || []
-}
-
-export async function getCoursesByTargetAudience(audience: string): Promise<Course[]> {
-  const supabase = await supabaseServer()
-  const { data, error } = await supabase.from('courses').select('*').contains('target_audience', [audience])
-  if (error) {
-    console.error('Error fetching courses by audience:', error)
     return []
   }
   return data || []
@@ -120,57 +72,6 @@ export async function getCertificatesByUserId(userId: string): Promise<Certifica
   const { data, error } = await supabase.from('certificates').select('*').eq('user_id', userId)
   if (error) {
     console.error('Error fetching certificates:', error)
-    return []
-  }
-  return data || []
-}
-
-export async function getCertificateById(id: string): Promise<Certificate | null> {
-  const supabase = await supabaseServer()
-  const { data, error } = await supabase.from('certificates').select('*').eq('id', id).single()
-  if (error) {
-    console.error('Error fetching certificate:', error)
-    return null
-  }
-  return data
-}
-
-export async function verifyCertificate(certificateNumber: string): Promise<Certificate | null> {
-  const supabase = await supabaseServer()
-  const { data, error } = await supabase.from('certificates').select('*').eq('certificate_number', certificateNumber).single()
-  if (error) {
-    console.error('Error verifying certificate:', error)
-    return null
-  }
-  return data
-}
-
-// Organization queries
-export async function getAllOrganizations(): Promise<Organization[]> {
-  const supabase = await supabaseServer()
-  const { data, error } = await supabase.from('organizations').select('*')
-  if (error) {
-    console.error('Error fetching organizations:', error)
-    return []
-  }
-  return data || []
-}
-
-export async function getOrganizationById(id: string): Promise<Organization | null> {
-  const supabase = await supabaseServer()
-  const { data, error } = await supabase.from('organizations').select('*').eq('id', id).single()
-  if (error) {
-    console.error('Error fetching organization:', error)
-    return null
-  }
-  return data
-}
-
-export async function getOrganizationsByType(type: string): Promise<Organization[]> {
-  const supabase = await supabaseServer()
-  const { data, error } = await supabase.from('organizations').select('*').eq('type', type)
-  if (error) {
-    console.error('Error fetching organizations by type:', error)
     return []
   }
   return data || []
